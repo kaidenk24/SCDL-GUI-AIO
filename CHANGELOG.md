@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2
+
+- Fix in-app updates: after "Update now" the app closed but didn't reopen, and a blank console window
+  (`find`) stayed open. The downloaded version now installs itself directly - no script, no console -
+  waits for the old version to close, copies itself in (retrying briefly locked files) and restarts.
+- Remove leftover update downloads (~60 MB each) on startup.
+- Updating from 1.0.0/1.0.1 still uses their old updater: if the blank window appears, close it and
+  download 1.0.2 from the Releases page once.
+
 ## 1.0.1
 
 - Fix DRM-protected tracks failing with "'charmap' codec can't encode character" instead of going to

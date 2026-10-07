@@ -124,6 +124,9 @@ def _run_app() -> int:
 
     sys.excepthook = report_crash
     _clean_temp_files(folder)
+    from scdl_gui.updates import clean_update_leftovers
+
+    clean_update_leftovers()
     window = MainWindow(AppState(load_settings()))
     window.show()
     try:
@@ -132,9 +135,24 @@ def _run_app() -> int:
         lock.unlock()
 
 
+def _run_installer(args: list[str]) -> int:
+    """--install-update SOURCE TARGET OLD_PID: run by a freshly downloaded copy of the app (see updates.py)."""
+    from pathlib import Path
+
+    from scdl_gui import updates
+
+    try:
+        source, target, old_pid = Path(args[0]), Path(args[1]), int(args[2])
+    except (IndexError, ValueError):
+        return 2
+    return 0 if updates.install_update(source, target, old_pid) else 1
+
+
 def main(args: list[str]) -> int:
     if args[:1] == ["--worker"]:
         return _run_worker(args[1:])
+    if args[:1] == ["--install-update"]:
+        return _run_installer(args[1:])
     return _run_app()
 
 

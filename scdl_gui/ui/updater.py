@@ -26,7 +26,7 @@ from scdl_gui.updates import (
     is_newer,
     prepare_exe_update,
     restart_command,
-    run_update_script,
+    start_installer,
 )
 
 
@@ -67,7 +67,7 @@ class _Bridge(QObject):
 
     checked = Signal(object, str, bool)  # Release | None, error, manual
     progress = Signal(int, int)
-    prepared = Signal(object, str)  # script path | None, error
+    prepared = Signal(object, str)  # folder with the new app | None, error
     git_done = Signal(str, str)  # log, error
 
 
@@ -182,13 +182,13 @@ class UpdateController(QObject):
             self._progress.close()
             self._progress = None
 
-    def _on_prepared(self, script, error: str) -> None:
+    def _on_prepared(self, new_app, error: str) -> None:
         self._close_progress()
         if error:
             QMessageBox.warning(self._parent, "Update", f"The update couldn't be installed:\n{error}")
             return
         QMessageBox.information(self._parent, "Update", "The update is ready. The app will now close, update and reopen.")
-        run_update_script(script)
+        start_installer(new_app)
         self._quit()
 
     def _on_git_done(self, _log: str, error: str) -> None:

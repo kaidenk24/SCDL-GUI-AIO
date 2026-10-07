@@ -11,9 +11,11 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -29,7 +31,9 @@ ASSET_NAME = "scdl-gui-windows-x64.zip"
 EXE_NAME = "scdl-gui.exe"
 CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 UPDATE_ERROR_FILE = "update-error.txt"
-NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+UPDATE_DIR_PREFIX = "scdl-gui-update-"
+INSTALL_FLAG = "--install-update"
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # for console tools (git, pip)
 DETACHED = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)(?:\.(\d+))?$")
 
@@ -109,7 +113,7 @@ def install_kind() -> str:
 def download_asset(release: Release, progress: Callable[[int, int], None] | None = None) -> Path:
     if not release.asset_url:
         raise UpdateError("This release has no Windows download attached.")
-    target = Path(tempfile.mkdtemp(prefix="scdl-gui-update-")) / ASSET_NAME
+    target = Path(tempfile.mkdtemp(prefix=UPDATE_DIR_PREFIX)) / ASSET_NAME
     sha = hashlib.sha256()
     done = 0
     try:
@@ -138,37 +142,72 @@ def _find_app_root(extracted: Path) -> Path:
 
 
 def prepare_exe_update(zip_path: Path) -> Path:
-    """Unpack the update and write a script that installs it once this app has exited."""
+    """Unpack the update; returns the folder holding the new scdl-gui.exe."""
     staging = zip_path.parent / "files"
     try:
         with zipfile.ZipFile(zip_path) as archive:
             archive.extractall(staging)
     except (zipfile.BadZipFile, OSError) as err:
         raise UpdateError(f"Couldn't unpack the update ({err})") from err
-    source = _find_app_root(staging)
-    target = app_dir()
-    error_file = data_dir() / UPDATE_ERROR_FILE
-    script = zip_path.parent / "install-update.cmd"
-    script.write_text(
-        "\r\n".join([
-            "@echo off",
-            "chcp 65001 >nul",
-            ":wait",
-            # (ping as a 1-second sleep: `timeout` refuses to run without an interactive console)
-            f'tasklist /FI "PID eq {os.getpid()}" 2>nul | find "{os.getpid()}" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)',
-            f'robocopy "{source}" "{target}" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul',
-            f'if %ERRORLEVEL% GEQ 8 echo Copying the new version into "{target}" failed. > "{error_file}"',
-            f'start "" "{target / EXE_NAME}"',
-            f'rd /s /q "{zip_path.parent}"',
-        ]) + "\r\n",
-        encoding="utf-8",
+    return _find_app_root(staging)
+
+
+def start_installer(new_app: Path) -> None:
+    """Run the *new* exe in --install-update mode; it waits for this app to exit, copies itself over
+    the installed copy and restarts it. It's a windowed program, so no console ever appears.
+    The caller should quit right after."""
+    subprocess.Popen(
+        [str(new_app / EXE_NAME), INSTALL_FLAG, str(new_app), str(app_dir()), str(os.getpid())],
+        creationflags=DETACHED, close_fds=True,
     )
-    return script
 
 
-def run_update_script(script: Path) -> None:
-    """Start the installer script, detached; the caller should quit right after."""
-    subprocess.Popen(["cmd", "/c", str(script)], creationflags=NO_WINDOW | DETACHED, close_fds=True)
+def wait_for_exit(pid: int, timeout_seconds: float) -> bool:
+    """True once process `pid` has ended (or never existed); False on timeout."""
+    import ctypes
+
+    synchronize, wait_timeout = 0x00100000, 0x00000102
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(synchronize, False, pid)
+    if not handle:
+        return True  # already gone
+    try:
+        return kernel32.WaitForSingleObject(handle, int(timeout_seconds * 1000)) != wait_timeout
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _copy_with_retries(source: Path, target: Path, attempts: int, delay: float) -> None:
+    for attempt in range(attempts):
+        try:
+            shutil.copytree(source, target, dirs_exist_ok=True)
+            return
+        except OSError:  # e.g. antivirus or Explorer briefly holding a file
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay)
+
+
+def install_update(source: Path, target: Path, old_pid: int, *, attempts: int = 10, delay: float = 1.0) -> bool:
+    """--install-update mode: copy the new app over the old one, then start it. Never raises -
+    failures are left for the app to show on its next start."""
+    ok = True
+    try:
+        if not wait_for_exit(old_pid, timeout_seconds=120):
+            raise UpdateError("the old version didn't close")
+        _copy_with_retries(source, target, attempts, delay)
+    except (OSError, UpdateError) as err:
+        ok = False
+        (data_dir() / UPDATE_ERROR_FILE).write_text(
+            f"Copying the new version into {target} failed: {err}", encoding="utf-8")
+    subprocess.Popen([str(target / EXE_NAME)], creationflags=DETACHED, close_fds=True, cwd=str(target))
+    return ok
+
+
+def clean_update_leftovers() -> None:
+    """Remove downloaded updates from earlier runs (each is ~60 MB)."""
+    for folder in Path(tempfile.gettempdir()).glob(f"{UPDATE_DIR_PREFIX}*"):
+        shutil.rmtree(folder, ignore_errors=True)  # one still in use is retried next start
 
 
 def take_update_error() -> str:

@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -101,19 +102,101 @@ class DownloadTests(unittest.TestCase):
             with self.assertRaises(updates.UpdateError):
                 updates.download_asset(release)
 
-    def test_prepare_exe_update_writes_installer_script(self):
-        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as appdata, \
-                mock.patch.dict(os.environ, {"APPDATA": appdata}):
+    def test_prepare_exe_update_returns_the_new_app_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
             zip_path = Path(tmp) / updates.ASSET_NAME
             with zipfile.ZipFile(zip_path, "w") as archive:
                 archive.writestr("scdl-gui/scdl-gui.exe", b"exe")
                 archive.writestr("scdl-gui/_internal/lib.dll", b"dll")
-            script = updates.prepare_exe_update(zip_path)
-            text = script.read_text(encoding="utf-8")
-            self.assertIn("robocopy", text)
-            self.assertIn(str(Path(tmp) / "files" / "scdl-gui"), text)
-            self.assertIn(str(os.getpid()), text)
+            new_app = updates.prepare_exe_update(zip_path)
+            self.assertEqual(new_app, Path(tmp) / "files" / "scdl-gui")
+            self.assertTrue((new_app / "_internal" / "lib.dll").is_file())
 
+    def test_start_installer_runs_the_new_exe_detached(self):
+        with mock.patch("subprocess.Popen") as popen:
+            updates.start_installer(Path("C:/staging/scdl-gui"))
+        command = popen.call_args.args[0]
+        self.assertTrue(command[0].endswith("scdl-gui.exe"))
+        self.assertEqual(command[1:2], [updates.INSTALL_FLAG])
+        self.assertEqual(command[4], str(os.getpid()))
+
+
+class InstallerTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self._env = mock.patch.dict(os.environ, {"APPDATA": str(self.root / "appdata")})
+        self._env.start()
+        self.source, self.target = self.root / "new", self.root / "installed"
+        (self.source / "_internal").mkdir(parents=True)
+        (self.source / "scdl-gui.exe").write_bytes(b"new exe")
+        (self.source / "_internal" / "lib.dll").write_bytes(b"new lib")
+        self.target.mkdir()
+        (self.target / "scdl-gui.exe").write_bytes(b"old exe")
+
+    def tearDown(self):
+        self._env.stop()
+        self._tmp.cleanup()
+
+    def test_wait_for_exit_on_a_process_that_is_already_gone(self):
+        self.assertTrue(updates.wait_for_exit(0x7FFFFFF0, timeout_seconds=1))
+
+    def test_wait_for_exit_waits_for_a_running_process(self):
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(1)"])
+        self.assertTrue(updates.wait_for_exit(child.pid, timeout_seconds=20))
+        self.assertIsNotNone(child.poll())
+
+    def test_wait_for_exit_times_out(self):
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            self.assertFalse(updates.wait_for_exit(child.pid, timeout_seconds=0.3))
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_install_update_copies_and_restarts(self):
+        with mock.patch("subprocess.Popen") as popen:
+            self.assertTrue(updates.install_update(self.source, self.target, 0x7FFFFFF0))
+        self.assertEqual((self.target / "scdl-gui.exe").read_bytes(), b"new exe")
+        self.assertEqual((self.target / "_internal" / "lib.dll").read_bytes(), b"new lib")
+        self.assertEqual(popen.call_args.args[0], [str(self.target / "scdl-gui.exe")])
+        self.assertEqual(updates.take_update_error(), "")
+
+    def test_install_update_retries_a_briefly_locked_file(self):
+        real_copytree = updates.shutil.copytree
+        calls = []
+
+        def flaky(src, *args, **kwargs):
+            if Path(src) == self.source:  # copytree also calls itself for subfolders
+                calls.append(1)
+                if len(calls) == 1:
+                    raise PermissionError("in use")
+            return real_copytree(src, *args, **kwargs)
+
+        with mock.patch("subprocess.Popen"), mock.patch.object(updates.shutil, "copytree", flaky):
+            self.assertTrue(updates.install_update(self.source, self.target, 0x7FFFFFF0, delay=0))
+        self.assertEqual(len(calls), 2)
+        self.assertEqual((self.target / "_internal" / "lib.dll").read_bytes(), b"new lib")
+
+    def test_failed_install_still_restarts_and_reports(self):
+        with mock.patch("subprocess.Popen") as popen, \
+                mock.patch.object(updates.shutil, "copytree", side_effect=PermissionError("denied")):
+            self.assertFalse(updates.install_update(self.source, self.target, 0x7FFFFFF0, attempts=2, delay=0))
+        popen.assert_called_once()  # the old version opens again rather than nothing at all
+        self.assertIn("denied", updates.take_update_error())
+
+    def test_clean_update_leftovers(self):
+        leftover = self.root / f"{updates.UPDATE_DIR_PREFIX}abc"
+        (leftover / "files").mkdir(parents=True)
+        unrelated = self.root / "keep-me"
+        unrelated.mkdir()
+        with mock.patch("tempfile.gettempdir", return_value=str(self.root)):
+            updates.clean_update_leftovers()
+        self.assertFalse(leftover.exists())
+        self.assertTrue(unrelated.exists())
+
+
+class MoreDownloadTests(unittest.TestCase):
     def test_prepare_rejects_zip_without_app(self):
         with tempfile.TemporaryDirectory() as tmp:
             zip_path = Path(tmp) / updates.ASSET_NAME
