@@ -1,0 +1,130 @@
+# SoundCloud Downloader (scdl-gui)
+
+A friendly Windows app for saving SoundCloud playlists, likes and tracks as high-quality, tagged MP3s -
+organised into folders exactly the way you want. Built on [scdl](https://github.com/scdl-org/scdl) and
+[yt-dlp](https://github.com/yt-dlp/yt-dlp).
+
+![The queue: links, where each one is saved, and folders](docs/screenshots/queue.png)
+
+> Unofficial - not affiliated with or endorsed by SoundCloud or YouTube. Only download music you have the
+> right to keep, and respect artists and each site's terms of service.
+
+## Features
+
+- **Paste and go** - playlists, albums, your likes, profiles, stations, single tracks and `on.soundcloud.com`
+  share links. Names are looked up for you.
+- **Folders your way** - one folder per playlist by default, or build your own layout and file names from
+  tokens like `{playlist}`, `{artist}`, `{index}`, with a live preview. Make your own folders and drag links
+  into them, or send them anywhere on your PC.
+- **Best quality** - uses your SoundCloud login (Go+ gets 256k AAC) or the artist's original upload, and
+  converts to MP3 (V0, 320, 256, V2 or 192).
+- **Even volume** - optional EBU R128 loudness levelling so every song plays equally loud, done in the same
+  encode (no extra quality loss).
+- **Full tags** - title, artist, album = playlist, track number, date, genre, source link and full-size cover art.
+- **Never downloads twice** - remembers what you already have (shared or per-folder), and gets every track
+  of each link even if it's in several playlists, if you prefer.
+- **DRM-protected tracks** - finds the same song on YouTube, scores the matches, and saves your choice in the
+  right place with the SoundCloud tags. Nothing is downloaded until you confirm it.
+- **Friendly with SoundCloud** - few requests per track, paced under the rate limit, and waits out a
+  "too many requests" answer instead of skipping tracks.
+- **Keeps itself up to date** - checks GitHub for new versions and updates in place.
+
+| Save layout | YouTube matches |
+| --- | --- |
+| ![Save layout](docs/screenshots/save-layout.png) | ![YouTube matches](docs/screenshots/youtube-matches.png) |
+
+## Install
+
+### The easy way (no Python needed)
+
+1. Download **`scdl-gui-windows-x64.zip`** from the [latest release](https://github.com/kaidenk24/scdl-gui/releases/latest).
+2. Unzip it anywhere you like (e.g. `Documents\scdl-gui`) and run **`scdl-gui.exe`**.
+   Windows SmartScreen may warn about an unknown publisher - choose *More info -> Run anyway*.
+3. On first start the app offers to add Start menu and desktop shortcuts, and to install **FFmpeg**
+   (needed to make MP3s) with one click.
+
+Updates are offered inside the app (Setup & updates).
+
+### From source
+
+Needs Windows 10/11 and [Python 3.10+](https://www.python.org/downloads/).
+
+```bat
+git clone https://github.com/kaidenk24/scdl-gui.git
+cd scdl-gui
+run.bat
+```
+
+`run.bat` sets up everything on first launch and keeps the components current. If you cloned with git, the
+app updates itself with `git pull` when a new version is out.
+
+## Using it
+
+1. **Queue** - paste links (or *Paste from clipboard* / *Import .txt*). Choose where each one goes in
+   *Save to*, or drag links onto a folder in the Folders panel. *Auto* follows the Save layout.
+2. **Save layout** - folder structure, file names and how already-downloaded tracks are handled.
+3. **Audio** - MP3 quality, *Even out volume*, original uploads, previews, and *only the first N tracks*.
+4. **Account & tags** - which browser to borrow your SoundCloud/YouTube login from, and tag options.
+5. Press **Start downloads**. **Activity** shows every saved, skipped and failed track.
+6. **YouTube matches** - confirm replacements for DRM-protected tracks (*Listen* first if unsure).
+
+### Logins
+
+The app never asks for a password. It borrows your existing login cookies from your browser (via yt-dlp).
+Firefox works best: recent Chrome/Edge/Brave versions encrypt their cookies, which often can't be read -
+close the browser first, or use Firefox.
+
+### YouTube matches
+
+Needs [Node.js](https://nodejs.org) (one-click install on the Setup & updates page). Without extra setup
+YouTube gives ~130-140 kbps audio. With YouTube Music Premium, paste a
+[PO token](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide) on the Account & tags page (or install a
+PO-token plugin such as `bgutil-ytdlp-pot-provider`) for 256k audio.
+
+## Where things are
+
+| What | Where |
+| --- | --- |
+| Settings, queue, logs | `%APPDATA%\SoundCloud Downloader\` |
+| Downloaded music | your library folder (default `Music\SoundCloud`) |
+| Failed tracks | `soundcloud-failed.txt` in the library folder |
+| "Already downloaded" list | `download_archive.txt` (or `.archives\`) in the library folder |
+
+## Troubleshooting
+
+- **"FFmpeg wasn't found"** - Setup & updates -> *Install FFmpeg for me*.
+- **Go+ tracks fail / 30-second previews** - log in to SoundCloud in your browser, then *Check again* on
+  Account & tags.
+- **Everything suddenly fails** - SoundCloud or YouTube changed something. Update the app (Setup & updates ->
+  *Check for updates now*).
+- **Still stuck** - [open an issue](https://github.com/kaidenk24/scdl-gui/issues/new/choose) with the log
+  from Activity (tick *Show technical details*, then *Copy log*).
+
+## Development
+
+```bat
+python -m venv .venv
+.venv\Scripts\pip install -r requirements-dev.txt
+.venv\Scripts\python -m unittest discover -s tests
+.venv\Scripts\python scdl-gui.pyw
+```
+
+- `scdl_gui/` - the app. Downloads run in a separate worker process (`scdl-gui --worker ...`), so the window
+  never freezes. Non-UI logic (`engine`, `templates`, `matching`, `parsing`, `updates`) has no Qt and is unit-tested.
+- `tools/build.ps1` - builds `dist/scdl-gui-windows-x64.zip` with PyInstaller.
+- `tools/screenshots.py` - renders the README screenshots with demo data.
+
+### Releasing
+
+1. Bump `APP_VERSION` in `scdl_gui/__init__.py` and add a section to `CHANGELOG.md`.
+2. Commit, then tag and push: `git tag v1.1.0 && git push origin main v1.1.0`.
+3. GitHub Actions tests, builds and publishes the release; installed apps see the update within a day.
+
+Releasing every few weeks keeps the bundled yt-dlp fresh - SoundCloud and YouTube change often.
+
+## License
+
+GPL-2.0-or-later - see [LICENSE](LICENSE). Uses [scdl](https://github.com/scdl-org/scdl) (GPL-2.0),
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense), [mutagen](https://github.com/quodlibet/mutagen)
+(GPL-2.0+) and [Qt for Python / PySide6](https://doc.qt.io/qtforpython/) (LGPL-3.0). The Windows app
+bundles these libraries unmodified; FFmpeg and Node.js are installed separately from their official sources.

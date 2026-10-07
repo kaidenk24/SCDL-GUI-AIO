@@ -1,0 +1,39 @@
+name: Release
+
+# Push a tag like v1.2.0 (matching APP_VERSION in scdl_gui/__init__.py) to publish a release.
+# The in-app updater looks for the scdl-gui-windows-x64.zip asset on the latest release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Check the tag matches the app version
+        shell: pwsh
+        run: |
+          $version = python -c "import scdl_gui; print(scdl_gui.APP_VERSION)"
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} doesn't match APP_VERSION $version" }
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m unittest discover -s tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Build the app
+        shell: pwsh
+        run: ./tools/build.ps1
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/scdl-gui-windows-x64.zip
+          generate_release_notes: true

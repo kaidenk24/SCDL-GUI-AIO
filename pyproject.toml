@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scdl-gui"
+dynamic = ["version"]
+description = "A friendly Windows app for saving SoundCloud playlists, likes and tracks as high-quality MP3s."
+readme = "README.md"
+license = "GPL-2.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "kaidenk24" }]
+keywords = ["soundcloud", "downloader", "mp3", "scdl", "yt-dlp", "gui"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+    "PySide6-Essentials>=6.8",
+    "scdl>=3.0.8",
+    "yt-dlp[default,curl-cffi]>=2026.8.19",
+    "mutagen>=1.47",
+]
+
+[project.optional-dependencies]
+dev = ["pyinstaller>=6.10", "ruff>=0.6"]
+
+[project.gui-scripts]
+scdl-gui = "scdl_gui.main:run"
+
+[project.urls]
+Homepage = "https://github.com/kaidenk24/scdl-gui"
+Issues = "https://github.com/kaidenk24/scdl-gui/issues"
+Releases = "https://github.com/kaidenk24/scdl-gui/releases"
+
+[tool.setuptools]
+packages = ["scdl_gui", "scdl_gui.ui"]
+
+[tool.setuptools.dynamic]
+version = { attr = "scdl_gui.APP_VERSION" }
+
+[tool.ruff]
+line-length = 125
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E731"]

@@ -1,0 +1,6 @@
+# What the app needs to run (run.bat installs and refreshes these).
+# yt-dlp changes often to keep up with SoundCloud/YouTube, so it's not pinned to an exact version.
+PySide6-Essentials>=6.8
+scdl>=3.0.8
+yt-dlp[default,curl-cffi]>=2026.8.19
+mutagen>=1.47
