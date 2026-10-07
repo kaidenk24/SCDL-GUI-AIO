@@ -18,7 +18,8 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
   converts to MP3 (V0, 320, 256, V2 or 192).
 - **Even volume** - optional EBU R128 loudness levelling so every song plays equally loud, done in the same
   encode (no extra quality loss).
-- **Full tags** - title, artist, album = playlist, track number, date, genre, source link and full-size cover art.
+- **Full tags** - title, artist, date, genre, source link and full-size cover art. The Album tag is the song's
+  own title by default, so iTunes/Apple Music show every track's own cover (or use the playlist name).
 - **Never downloads twice** - remembers what you already have (shared or per-folder), and gets every track
   of each link even if it's in several playlists, if you prefer.
 - **DRM-protected tracks** - finds the same song on YouTube, scores the matches, and saves your choice in the

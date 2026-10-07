@@ -37,6 +37,7 @@ from scdl.patches.switch_outtmpl_preprocessor import OuttmplPP
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor import soundcloud as sc_extractor
 from yt_dlp.networking.exceptions import HTTPError
+from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 from yt_dlp.utils import ExtractorError, PostProcessingError, prepend_extension, replace_extension
 
@@ -51,6 +52,7 @@ RATE_STATE = os.environ.get("SCDL_RATE_STATE") or None
 ALLOW_PREVIEWS = os.environ.get("SCDL_ALLOW_PREVIEWS") == "1"
 FFMPEG = os.environ.get("SCDL_FFMPEG") or None
 MAX_TRACKS = int(os.environ.get("SCDL_MAX_TRACKS") or 0)  # 0 = all tracks of each link
+ALBUM_MODE = os.environ.get("SCDL_ALBUM_MODE", "title")  # title | playlist | none
 YT_FALLBACK = os.environ.get("SCDL_YT_FALLBACK") == "1"  # report DRM tracks for a YouTube match
 DRM_MARKER = "@@DRM "
 
@@ -312,12 +314,35 @@ def outtmpl_run(self, info):
 
 
 OuttmplPP.run = outtmpl_run
+
+
+class AlbumModePP(PostProcessor):
+    """Album tag for the "title" and "none" settings. yt-dlp itself labels tracks from a SoundCloud
+    playlist with album = playlist and album artist = its owner (scdl's --no-album-tag can't stop that),
+    so clear those here. "title": album = the song's own title, so players like iTunes show each
+    track's own cover instead of one cover for a whole playlist-as-album."""
+
+    def __init__(self, mode: str) -> None:
+        super().__init__()
+        self._mode = mode
+
+    def run(self, info):
+        for key in ("album", "album_artist", "album_artists", "album_type", "track_number"):
+            info[key] = None
+        info["meta_album"] = info.get("title") if self._mode == "title" else None
+        info["meta_album_artist"] = None
+        info["meta_track"] = None
+        return [], info
+
+
 _original_build = scdl_main._build_ytdl_params
 
 
 def build_params(url, scdl_args):
     global _archive_path
     url, params, postprocessors = _original_build(url, scdl_args)
+    if ALBUM_MODE in ("title", "none"):
+        postprocessors.append((AlbumModePP(ALBUM_MODE), "pre_process"))  # after scdl's OuttmplPP
     _output_templates.update({
         in_playlist: scdl_main._build_ytdl_output_filename(scdl_args, in_playlist) for in_playlist in (False, True)
     })

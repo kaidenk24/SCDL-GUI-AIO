@@ -175,7 +175,7 @@ def worker_args(settings: Settings, job: Job) -> list[str]:
         args.append("--original-art")
     if not settings.use_originals:
         args.append("--no-original")
-    if not settings.album_tags:
+    if settings.album_mode != "playlist":  # scdl only knows playlist albums; "title" is set by the worker
         args.append("--no-album-tag")
     if settings.artist_from_title:
         args.append("--extract-artist")
@@ -212,7 +212,7 @@ def worker_env(settings: Settings, source_url: str = "") -> dict[str, str]:
         "SCDL_YT_PO_TOKEN": settings.youtube_po_token.strip(),
         **_pot_env(settings),
         "SCDL_FULL_ART": "1" if settings.full_art else "0",
-        "SCDL_ALBUM_TAGS": "1" if settings.album_tags else "0",
+        "SCDL_ALBUM_MODE": settings.album_mode,
         "PYTHONIOENCODING": "utf-8",
         "PYTHONUTF8": "1",
         "PYTHONUNBUFFERED": "1",

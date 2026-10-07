@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QPushButton
 from scdl_gui import potoken
 from scdl_gui.engine import firefox_profiles, has_pot_plugin
 from scdl_gui.settings import BROWSERS, Settings
+from scdl_gui.ui.album_card import AlbumCard
 from scdl_gui.ui.state import AppState
 from scdl_gui.ui.widgets import Card, OptionList, Page, StatusPill, hbox, label
 
@@ -33,6 +34,7 @@ class AccountPage(Page):
         self.body.addWidget(self._build_login())
         self.body.addWidget(self._build_youtube())
         self.body.addWidget(self._build_tags())
+        self.body.addWidget(AlbumCard(state))
         self.finish()
         state.settings_changed.connect(lambda _s: self._load())
         self._load()
@@ -100,13 +102,11 @@ class AccountPage(Page):
         ])
         self.art.changed.connect(lambda full: self._state.update(full_art=full))
         card.body.addWidget(self.art)
-        self.album_tags = QCheckBox("Album = playlist name, track number = position in the playlist")
-        self.album_tags.toggled.connect(lambda on: self._state.update(album_tags=on))
         self.artist_from_title = QCheckBox('Take the artist from titles like "Artist - Song" (instead of the uploader)')
         self.artist_from_title.toggled.connect(lambda on: self._state.update(artist_from_title=on))
         self.description = QCheckBox("Also save each track's description as a .txt file")
         self.description.toggled.connect(lambda on: self._state.update(save_description=on))
-        for box in (self.album_tags, self.artist_from_title, self.description):
+        for box in (self.artist_from_title, self.description):
             card.body.addWidget(box)
         return card
 
@@ -135,7 +135,7 @@ class AccountPage(Page):
     def _load(self) -> None:
         s: Settings = self._state.settings
         for box, value in (
-            (self.use_login, s.use_login), (self.album_tags, s.album_tags),
+            (self.use_login, s.use_login),
             (self.artist_from_title, s.artist_from_title), (self.description, s.save_description),
             (self.youtube_fallback, s.youtube_fallback), (self.youtube_login, s.youtube_login),
         ):

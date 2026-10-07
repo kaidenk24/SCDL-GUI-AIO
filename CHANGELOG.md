@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3
+
+- New Album tag setting (Account & tags): song title (new default), playlist name, or none. With the
+  playlist name, iTunes showed one cover for every song in a playlist; with the song title each track
+  shows its own cover. Existing settings keep their previous behaviour.
+- 'Apply to MP3s already in my library' rewrites the Album tag of files you already have (tags only).
+- Fix 'No album tag': yt-dlp's own playlist album/album-artist values were still written.
+
 ## 1.0.2
 
 - Fix in-app updates: after "Update now" the app closed but didn't reopen, and a blank console window

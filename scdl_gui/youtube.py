@@ -39,7 +39,7 @@ if POT_PLUGIN_DIR:
     # Must be set before the first YoutubeDL is created - that's when yt-dlp loads plugins.
     yt_dlp.globals.plugin_dirs.value = [POT_PLUGIN_DIR, "default"]
 FULL_ART = os.environ.get("SCDL_FULL_ART", "1") == "1"
-ALBUM_TAGS = os.environ.get("SCDL_ALBUM_TAGS", "1") == "1"
+ALBUM_MODE = os.environ.get("SCDL_ALBUM_MODE", "title")  # title | playlist | none
 JS_RUNTIMES = _js_runtimes()
 MUSIC_RESULTS = 3
 WEB_RESULTS = 6
@@ -162,7 +162,9 @@ def write_tags(path: str, track: dict, youtube_url: str) -> None:
     tags.add(TIT2(encoding=3, text=track.get("title") or ""))
     if track.get("uploader"):
         tags.add(TPE1(encoding=3, text=track["uploader"]))
-    if ALBUM_TAGS and track.get("playlist"):
+    if ALBUM_MODE == "title":
+        tags.add(TALB(encoding=3, text=track.get("title") or ""))
+    elif ALBUM_MODE == "playlist" and track.get("playlist"):
         tags.add(TALB(encoding=3, text=track["playlist"]))
         if track.get("owner"):
             tags.add(TPE2(encoding=3, text=track["owner"]))

@@ -19,6 +19,7 @@ FOLDER_ROOT = ""  # straight into the library folder
 
 ARCHIVE_MODES = ("shared", "per_link", "files")
 QUALITIES = ("V0", "320", "256", "V2", "192")
+ALBUM_MODES = ("title", "playlist", "none")
 # Browsers yt-dlp can borrow cookies from. Firefox is the most reliable on Windows: recent
 # Chromium browsers encrypt their cookies in a way that often can't be read while they run.
 BROWSERS = ("firefox", "librewolf", "chrome", "edge", "brave", "opera", "vivaldi", "chromium")
@@ -37,7 +38,7 @@ class Settings:
     skip_previews: bool = True
     max_tracks: int = 0  # 0 = every track of each link
     full_art: bool = True
-    album_tags: bool = True
+    album_mode: str = "title"  # Album tag: "title" (own cover per song in iTunes), "playlist" or "none"
     artist_from_title: bool = False
     save_description: bool = False
     use_login: bool = True
@@ -128,6 +129,8 @@ def _validated(settings: Settings) -> Settings:
         changes["max_tracks"] = 0
     if settings.cookie_browser not in BROWSERS:
         changes["cookie_browser"] = "firefox"
+    if settings.album_mode not in ALBUM_MODES:
+        changes["album_mode"] = "title"
     if not settings.library:
         changes["library"] = default_library()
     return settings.with_changes(**changes) if changes else settings
@@ -151,6 +154,9 @@ def _write_json(path: Path, data) -> None:
 
 def load_settings() -> Settings:
     raw = _read_json(data_dir() / "settings.json")
+    if isinstance(raw, dict) and "album_mode" not in raw and "album_tags" in raw:
+        # Settings from 1.0.x: keep what people had (album = playlist, or no album tag).
+        raw = {**raw, "album_mode": "playlist" if raw["album_tags"] else "none"}
     settings = _coerce(Settings, raw) if isinstance(raw, dict) else Settings()
     return _validated(settings)
 
