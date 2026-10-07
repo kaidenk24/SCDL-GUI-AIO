@@ -7,20 +7,38 @@ cd /d "%~dp0"
 
 set "VENV=.venv"
 set "STAMP=%VENV%\.components-updated"
+rem READY is written only when setup fully finished; without it, .venv is a leftover of a
+rem cancelled or failed setup and is rebuilt. (Setups from older versions only wrote STAMP.)
+set "READY=%VENV%\.setup-complete"
 
-if exist "%VENV%\Scripts\pythonw.exe" goto :refresh
+if exist "%READY%" goto :refresh
+if exist "%STAMP%" (type nul > "%READY%" & goto :refresh)
+if exist "%VENV%" call :remove_unfinished || goto :in_use
 
-echo Setting up SoundCloud Downloader for the first time. This takes a minute or two...
+echo Setting up SoundCloud Downloader for the first time.
+echo This downloads about 150 MB and takes a few minutes - please leave this window open.
+echo.
 set "PY="
 where py >nul 2>nul && set "PY=py -3"
 if not defined PY where python >nul 2>nul && set "PY=python"
 if not defined PY goto :no_python
 %PY% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" || goto :old_python
+echo [1/3] Creating a private Python environment...
 %PY% -m venv "%VENV%" || goto :failed
-"%VENV%\Scripts\python.exe" -m pip install --disable-pip-version-check -q --upgrade pip
+echo [2/3] Updating pip...
+"%VENV%\Scripts\python.exe" -m pip install --disable-pip-version-check --upgrade pip || goto :failed
+echo [3/3] Installing the app's components: PySide6, scdl, yt-dlp, mutagen...
 "%VENV%\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt || goto :failed
 type nul > "%STAMP%"
+type nul > "%READY%"
+echo Done - starting the app.
 goto :start
+
+:remove_unfinished
+echo An earlier setup didn't finish - starting it again...
+rmdir /s /q "%VENV%" 2>nul
+if exist "%VENV%" exit /b 1
+exit /b 0
 
 :refresh
 powershell -NoProfile -Command "if ((Get-Item '%STAMP%' -ErrorAction SilentlyContinue).LastWriteTime -gt (Get-Date).AddDays(-1)) { exit 1 }"
@@ -55,7 +73,15 @@ exit /b 1
 :failed
 echo.
 echo Setting up failed - check your internet connection and run this file again.
-echo If it keeps failing, delete the .venv folder next to this file and try once more.
+echo (It starts over automatically.)
+echo.
+pause
+exit /b 1
+
+:in_use
+echo.
+echo The .venv folder from an unfinished setup couldn't be removed - is the app still open?
+echo Close it and run this file again.
 echo.
 pause
 exit /b 1

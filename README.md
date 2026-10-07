@@ -48,13 +48,14 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
 
 Needs Windows 10/11 and [Python 3.10+](https://www.python.org/downloads/).
 
-```bat
+```powershell
 git clone https://github.com/kaidenk24/SCDL-GUI-AIO.git
 cd SCDL-GUI-AIO
-run.bat
+.\run.bat
 ```
 
-`run.bat` sets up everything on first launch and keeps the components current. If you cloned with git, the
+(Or double-click `run.bat` in File Explorer.) The first launch downloads about 150 MB and takes a few
+minutes; it starts over by itself if it gets interrupted. After that, `run.bat` keeps the components current. If you cloned with git, the
 app updates itself with `git pull` when a new version is out.
 
 ## Using it
