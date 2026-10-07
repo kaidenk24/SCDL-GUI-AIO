@@ -11,6 +11,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from scdl_gui import potoken
 from scdl_gui.settings import FOLDER_AUTO, Job, Settings, app_dir
 from scdl_gui.templates import output_target
 
@@ -183,6 +184,15 @@ def worker_args(settings: Settings, job: Job) -> list[str]:
     return args
 
 
+def _pot_env(settings: Settings) -> dict[str, str]:
+    """Where the automatic PO-token generator lives, if it's set up and switched on."""
+    install = potoken.installed() if settings.auto_po_token else None
+    return {
+        "SCDL_POT_PLUGIN_DIR": str(install.plugin_dir) if install else "",
+        "SCDL_POT_SERVER_HOME": str(install.server_home) if install else "",
+    }
+
+
 def worker_env(settings: Settings, source_url: str = "") -> dict[str, str]:
     return {
         "SCDL_MP3_QUALITY": settings.quality,
@@ -200,6 +210,7 @@ def worker_env(settings: Settings, source_url: str = "") -> dict[str, str]:
         "SCDL_YT_FALLBACK": "1" if settings.youtube_fallback else "0",
         "SCDL_YT_LOGIN": "1" if settings.youtube_login else "0",
         "SCDL_YT_PO_TOKEN": settings.youtube_po_token.strip(),
+        **_pot_env(settings),
         "SCDL_FULL_ART": "1" if settings.full_art else "0",
         "SCDL_ALBUM_TAGS": "1" if settings.album_tags else "0",
         "PYTHONIOENCODING": "utf-8",

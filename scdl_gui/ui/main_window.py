@@ -392,6 +392,7 @@ class MainWindow(QMainWindow):
             if answer == QMessageBox.StandardButton.Yes:
                 self.nav.setCurrentRow(PAGE_SETUP)
         self.updater.check_on_start()
+        self.setup_page.pot_card.manager.check_for_update()
 
     def _confirm_quit_for_update(self) -> bool:
         if not self.runner.is_running():

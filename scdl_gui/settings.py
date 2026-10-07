@@ -46,7 +46,9 @@ class Settings:
     ffmpeg_path: str = ""  # "" = find ffmpeg on PATH
     youtube_fallback: bool = True  # find DRM-protected tracks on YouTube (you confirm each one)
     youtube_login: bool = True  # use the Firefox YouTube login
-    youtube_po_token: str = ""  # optional; unlocks YouTube Music's 256k Premium audio
+    youtube_po_token: str = ""  # manual token (advanced); automatic tokens are preferred
+    auto_po_token: bool = True  # use the automatic PO-token generator when it's set up
+    last_pot_check: float = 0.0  # epoch seconds of the last generator update check
     new_link_folder: str | None = FOLDER_AUTO
     folders: tuple[str, ...] = ()
     lookup_names: bool = True

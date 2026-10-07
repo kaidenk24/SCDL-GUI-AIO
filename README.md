@@ -24,7 +24,8 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
 - **Never downloads twice** - remembers what you already have (shared or per-folder), and gets every track
   of each link even if it's in several playlists, if you prefer.
 - **DRM-protected tracks** - finds the same song on YouTube, scores the matches, and saves your choice in the
-  right place with the SoundCloud tags. Nothing is downloaded until you confirm it.
+  right place with the SoundCloud tags. Nothing is downloaded until you confirm it. With YouTube Music
+  Premium, one click sets up automatic PO tokens for 256k+ audio.
 - **Friendly with SoundCloud** - few requests per track, paced under the rate limit, and waits out a
   "too many requests" answer instead of skipping tracks.
 - **Keeps itself up to date** - checks GitHub for new versions and updates in place.
@@ -77,15 +78,20 @@ close the browser first, or use Firefox.
 ### YouTube matches
 
 Needs [Node.js](https://nodejs.org) (one-click install on the Setup & updates page). Without extra setup
-YouTube gives ~130-140 kbps audio. With YouTube Music Premium, paste a
-[PO token](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide) on the Account & tags page (or install a
-PO-token plugin such as `bgutil-ytdlp-pot-provider`) for 256k audio.
+YouTube gives ~130-140 kbps audio.
+
+**YouTube Music Premium:** on Setup & updates, press *Set up automatic PO tokens*. The app downloads the
+[bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) token generator
+(GPL-3.0, ~100 MB, runs through Node.js) into its data folder, and from then on YouTube matches download at
+256k AAC / 282k Opus. It updates itself daily. A [PO token](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide)
+can also be pasted by hand on Account & tags.
 
 ## Where things are
 
 | What | Where |
 | --- | --- |
 | Settings, queue, logs | `%APPDATA%\SoundCloud Downloader\` |
+| PO-token generator (if set up) | `%APPDATA%\SoundCloud Downloader\potoken\` |
 | Downloaded music | your library folder (default `Music\SoundCloud`) |
 | Failed tracks | `soundcloud-failed.txt` in the library folder |
 | "Already downloaded" list | `download_archive.txt` (or `.archives\`) in the library folder |
@@ -127,4 +133,5 @@ Releasing every few weeks keeps the bundled yt-dlp fresh - SoundCloud and YouTub
 GPL-2.0-or-later - see [LICENSE](LICENSE). Uses [scdl](https://github.com/scdl-org/scdl) (GPL-2.0),
 [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense), [mutagen](https://github.com/quodlibet/mutagen)
 (GPL-2.0+) and [Qt for Python / PySide6](https://doc.qt.io/qtforpython/) (LGPL-3.0). The Windows app
-bundles these libraries unmodified; FFmpeg and Node.js are installed separately from their official sources.
+bundles these libraries unmodified; FFmpeg, Node.js and the optional PO-token generator (GPL-3.0) are not
+bundled - they're downloaded from their official sources only when you choose to set them up.

@@ -18,5 +18,7 @@ python -m venv .venv
   `@@NAME {json}` lines - see `parsing.py`.
 - Don't put real people's names, links or file paths in tests, screenshots or examples.
 - Check `tools/build.ps1` still builds if you add dependencies (the Windows app is built with PyInstaller).
+- Don't bundle GPL-3.0-only code into the app (scdl is GPL-2.0); download such components on demand
+  instead, like the PO-token generator in `potoken.py`.
 
 By contributing you agree that your contributions are licensed under GPL-2.0-or-later.

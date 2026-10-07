@@ -6,6 +6,7 @@ from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QPushButton
 
+from scdl_gui import potoken
 from scdl_gui.engine import firefox_profiles, has_pot_plugin
 from scdl_gui.settings import BROWSERS, Settings
 from scdl_gui.ui.state import AppState
@@ -88,7 +89,7 @@ class AccountPage(Page):
         card.body.addLayout(hbox(label("PO token:"), self.po_token, guide))
         self.po_hint = label("", "Hint", wrap=True)
         card.body.addWidget(self.po_hint)
-        card.body.addWidget(label("YouTube also needs Node.js - see Setup & updates.", "Hint"))
+        card.body.addWidget(label("YouTube needs Node.js, and Premium audio needs PO tokens - both on Setup & updates.", "Hint"))
         return card
 
     def _build_tags(self) -> Card:
@@ -156,12 +157,15 @@ class AccountPage(Page):
             widget.setEnabled(s.youtube_fallback)
         if self.po_token.text() != s.youtube_po_token:
             self.po_token.setText(s.youtube_po_token)
-        if has_pot_plugin():
+        if s.auto_po_token and potoken.installed():
+            self.po_hint.setText("Automatic PO tokens are set up (Setup & updates), so there's no need to paste one. "
+                                 "With YouTube Music Premium, matches download at 256k+.")
+        elif has_pot_plugin():
             self.po_hint.setText("A PO-token plugin is installed, so tokens are fetched automatically.")
         elif s.youtube_po_token:
             self.po_hint.setText("Using your PO token with the YouTube Music client. Tokens expire - if downloads start "
                                  "failing, paste a fresh one or clear the box.")
         else:
-            self.po_hint.setText("Without a PO token YouTube gives ~130-140 kbps audio, which is then converted to your "
-                                 "MP3 setting. With YouTube Music Premium, a PO token unlocks 256k audio.")
+            self.po_hint.setText("Without a PO token YouTube gives ~130-140 kbps audio. With YouTube Music Premium, set up "
+                                 "automatic PO tokens on the Setup & updates page (or paste one here) for 256k+ audio.")
         self.art.set_value(s.full_art)

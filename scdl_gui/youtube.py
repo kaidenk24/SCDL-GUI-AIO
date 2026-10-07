@@ -4,8 +4,8 @@
     --yt-download FILE  FILE = JSON {"key", "url", "target", "track", "archive"}; prints "@@YTDONE {json}"
 
 Uses the browser's YouTube login (SCDL_YT_LOGIN=1), a JavaScript runtime (Node/Deno) for YouTube's
-challenges, and - when given (SCDL_YT_PO_TOKEN) or provided by a plugin - a PO token so the
-YouTube Music client can be used (256k audio with YouTube Music Premium).
+challenges, and - generated automatically (SCDL_POT_*), given by hand (SCDL_YT_PO_TOKEN) or provided
+by an installed plugin - a PO token so the YouTube Music client can be used (Premium: 256k+ audio).
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import os
 import urllib.parse
 import urllib.request
 
+import yt_dlp.globals
 from mutagen.id3 import APIC, COMM, ID3, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TRCK, WOAF, ID3NoHeaderError
 from yt_dlp import YoutubeDL
 
@@ -32,6 +33,11 @@ def _js_runtimes() -> dict:
 
 YT_LOGIN = os.environ.get("SCDL_YT_LOGIN") == "1"
 PO_TOKEN = (os.environ.get("SCDL_YT_PO_TOKEN") or "").strip()
+POT_PLUGIN_DIR = os.environ.get("SCDL_POT_PLUGIN_DIR") or ""  # automatic PO tokens (see potoken.py)
+POT_SERVER_HOME = os.environ.get("SCDL_POT_SERVER_HOME") or ""
+if POT_PLUGIN_DIR:
+    # Must be set before the first YoutubeDL is created - that's when yt-dlp loads plugins.
+    yt_dlp.globals.plugin_dirs.value = [POT_PLUGIN_DIR, "default"]
 FULL_ART = os.environ.get("SCDL_FULL_ART", "1") == "1"
 ALBUM_TAGS = os.environ.get("SCDL_ALBUM_TAGS", "1") == "1"
 JS_RUNTIMES = _js_runtimes()
@@ -46,11 +52,15 @@ def youtube_opts(**extra) -> dict:
     opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "js_runtimes": JS_RUNTIMES, **extra}
     if YT_LOGIN:
         opts["cookiesfrombrowser"] = (worker.BROWSER_NAME, worker.PROFILE, None, None)
-    if PO_TOKEN or has_pot_plugin():
+    automatic = bool(POT_PLUGIN_DIR and POT_SERVER_HOME)
+    if PO_TOKEN or automatic or has_pot_plugin():
+        # The YouTube Music client serves Premium's 256k AAC / 282k Opus, but only with a PO token.
         client_args = {"player_client": ["web_music", "default"]}
         if PO_TOKEN:
             client_args["po_token"] = [f"web_music.gvs+{PO_TOKEN}"]
         opts["extractor_args"] = {"youtube": client_args}
+        if automatic:
+            opts["extractor_args"]["youtubepot-bgutilscript"] = {"server_home": [POT_SERVER_HOME]}
     return opts
 
 

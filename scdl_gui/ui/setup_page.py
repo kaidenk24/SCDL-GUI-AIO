@@ -12,6 +12,7 @@ from scdl_gui import APP_VERSION, GITHUB_URL
 from scdl_gui.engine import failed_log_path, find_ffmpeg, find_js_runtime
 from scdl_gui.settings import Settings, data_dir
 from scdl_gui.system import FFMPEG, NODE, create_shortcuts, shortcut_folders
+from scdl_gui.ui.potoken_card import PotCard
 from scdl_gui.ui.state import AppState
 from scdl_gui.ui.tool_installer import ToolInstaller
 from scdl_gui.ui.widgets import Card, Page, hbox, label
@@ -37,6 +38,9 @@ class SetupPage(Page):
         self.installer = ToolInstaller(self)
         self.installer.finished.connect(lambda _name, _ok: self._load())
         self.body.addWidget(self._build_helpers())
+        self.pot_card = PotCard(state)
+        self.installer.finished.connect(lambda _name, _ok: self.pot_card.refresh())
+        self.body.addWidget(self.pot_card)
         self.body.addWidget(self._build_updates())
         self.body.addWidget(self._build_files())
         self.body.addWidget(self._build_about())
@@ -62,7 +66,7 @@ class SetupPage(Page):
         self.install_node = QPushButton("Install Node.js for me")
         self.install_node.clicked.connect(lambda: self.installer.install(NODE))
         card.body.addSpacing(6)
-        card.body.addWidget(label("Node.js - needed for YouTube matches", "CardTitle"))
+        card.body.addWidget(label("Node.js - needed for YouTube matches and PO tokens", "CardTitle"))
         card.body.addWidget(self.node_status)
         card.body.addLayout(hbox(self.install_node, None))
         return card
