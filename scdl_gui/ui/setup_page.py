@@ -103,9 +103,7 @@ class SetupPage(Page):
         card.body.addWidget(label(DISCLAIMER, "Muted", wrap=True))
         github = QPushButton("Project page")
         github.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(GITHUB_URL)))
-        issue = QPushButton("Report a problem")
-        issue.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(f"{GITHUB_URL}/issues/new")))
-        card.body.addLayout(hbox(github, issue, None))
+        card.body.addLayout(hbox(github, None))
         return card
 
     # ---- behaviour

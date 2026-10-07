@@ -103,8 +103,8 @@ can also be pasted by hand on Account & tags.
   Account & tags.
 - **Everything suddenly fails** - SoundCloud or YouTube changed something. Update the app (Setup & updates ->
   *Check for updates now*).
-- **Still stuck** - [open an issue](https://github.com/kaidenk24/scdl-gui/issues/new/choose) with the log
-  from Activity (tick *Show technical details*, then *Copy log*).
+- **Something else** - the Activity page explains what went wrong (tick *Show technical details* for the
+  full output), and `app.log` is in Setup & updates -> *Open settings & logs folder*.
 
 ## Development
 
