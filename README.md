@@ -36,7 +36,7 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
 
 ### The easy way (no Python needed)
 
-1. Download **`scdl-gui-windows-x64.zip`** from the [latest release](https://github.com/kaidenk24/scdl-gui/releases/latest).
+1. Download **`scdl-gui-windows-x64.zip`** from the [latest release](https://github.com/kaidenk24/SCDL-GUI-AIO/releases/latest).
 2. Unzip it anywhere you like (e.g. `Documents\scdl-gui`) and run **`scdl-gui.exe`**.
    Windows SmartScreen may warn about an unknown publisher - choose *More info -> Run anyway*.
 3. On first start the app offers to add Start menu and desktop shortcuts, and to install **FFmpeg**
@@ -48,8 +48,8 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
 Needs Windows 10/11 and [Python 3.10+](https://www.python.org/downloads/).
 
 ```bat
-git clone https://github.com/kaidenk24/scdl-gui.git
-cd scdl-gui
+git clone https://github.com/kaidenk24/SCDL-GUI-AIO.git
+cd SCDL-GUI-AIO
 run.bat
 ```
 

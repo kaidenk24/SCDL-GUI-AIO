@@ -3,5 +3,5 @@
 APP_NAME = "SoundCloud Downloader"
 APP_VERSION = "1.0.0"
 APP_ID = "scdl-gui.SoundCloudDownloader"  # Windows taskbar grouping
-GITHUB_REPO = "kaidenk24/scdl-gui"
+GITHUB_REPO = "kaidenk24/SCDL-GUI-AIO"
 GITHUB_URL = f"https://github.com/{GITHUB_REPO}"

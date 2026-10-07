@@ -13,7 +13,7 @@ def _show_setup_hint(error: Exception) -> None:
     message = (
         f"SoundCloud Downloader can't start: {error}\n\n"
         "Start it with run.bat (in the same folder) - it installs everything it needs.\n"
-        "Or download the ready-made app from https://github.com/kaidenk24/scdl-gui/releases"
+        "Or download the ready-made app from https://github.com/kaidenk24/SCDL-GUI-AIO/releases"
     )
     try:
         import ctypes

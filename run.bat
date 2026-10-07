@@ -37,7 +37,7 @@ exit /b 0
 :no_python
 echo.
 echo Python wasn't found. Either:
-echo   - download the ready-made app (no Python needed): https://github.com/kaidenk24/scdl-gui/releases
+echo   - download the ready-made app (no Python needed): https://github.com/kaidenk24/SCDL-GUI-AIO/releases
 echo   - or install Python 3.10+ from https://www.python.org/downloads/ (tick "Add python.exe to PATH")
 echo     and run this file again.
 echo.
@@ -47,7 +47,7 @@ exit /b 1
 :old_python
 echo.
 echo Python 3.10 or newer is needed. Get it from https://www.python.org/downloads/
-echo or download the ready-made app: https://github.com/kaidenk24/scdl-gui/releases
+echo or download the ready-made app: https://github.com/kaidenk24/SCDL-GUI-AIO/releases
 echo.
 pause
 exit /b 1

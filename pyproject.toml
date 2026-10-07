@@ -34,9 +34,9 @@ dev = ["pyinstaller>=6.10", "ruff>=0.6"]
 scdl-gui = "scdl_gui.main:run"
 
 [project.urls]
-Homepage = "https://github.com/kaidenk24/scdl-gui"
-Issues = "https://github.com/kaidenk24/scdl-gui/issues"
-Releases = "https://github.com/kaidenk24/scdl-gui/releases"
+Homepage = "https://github.com/kaidenk24/SCDL-GUI-AIO"
+Issues = "https://github.com/kaidenk24/SCDL-GUI-AIO/issues"
+Releases = "https://github.com/kaidenk24/SCDL-GUI-AIO/releases"
 
 [tool.setuptools]
 packages = ["scdl_gui", "scdl_gui.ui"]
