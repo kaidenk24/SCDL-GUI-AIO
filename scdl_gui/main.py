@@ -17,8 +17,17 @@ LOCK_WAIT_MS = 4000  # an updated copy restarting waits for the old one to close
 TEMP_MAX_AGE_SECONDS = 24 * 60 * 60
 
 
+def _use_utf8_output() -> None:
+    """The app reads worker output as UTF-8. Packaged (PyInstaller) builds ignore PYTHONIOENCODING /
+    PYTHONUTF8, so set it here - otherwise names like 'SATØS' or '⧸' arrive garbled or escaped."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+
+
 def _run_worker(args: list[str]) -> int:
     """Background worker: errors go to its output (read by the app), never to a pop-up."""
+    _use_utf8_output()
     try:
         from scdl_gui import worker
 

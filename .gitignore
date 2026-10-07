@@ -17,3 +17,7 @@ dist/
 *.lnk
 .idea/
 .vscode/
+
+# A release unzipped into the repo folder
+/_internal/
+/scdl-gui.exe

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- Fix garbled track names in the Activity log of the packaged app (e.g. `SATØS`, `⧸`, or a track
+  shown as "uff0a"). Downloaded files were always named correctly; only the display was affected.
+
 ## 1.0.0
 
 First public release.
