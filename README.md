@@ -4,8 +4,6 @@ A friendly Windows app for saving SoundCloud playlists, likes and tracks as high
 organised into folders exactly the way you want. Built on [scdl](https://github.com/scdl-org/scdl) and
 [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
-![The queue: links, where each one is saved, and folders](docs/screenshots/queue.png)
-
 > Unofficial - not affiliated with or endorsed by SoundCloud or YouTube. Only download music you have the
 > right to keep, and respect artists and each site's terms of service.
 
@@ -44,7 +42,6 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
 3. On first start the app offers to add Start menu and desktop shortcuts, and to install **FFmpeg**
    (needed to make MP3s) with one click.
 
-Updates are offered inside the app (Setup & updates).
 
 ### From source
 
@@ -105,28 +102,6 @@ can also be pasted by hand on Account & tags.
   *Check for updates now*).
 - **Something else** - the Activity page explains what went wrong (tick *Show technical details* for the
   full output), and `app.log` is in Setup & updates -> *Open settings & logs folder*.
-
-## Development
-
-```bat
-python -m venv .venv
-.venv\Scripts\pip install -r requirements-dev.txt
-.venv\Scripts\python -m unittest discover -s tests
-.venv\Scripts\python scdl-gui.pyw
-```
-
-- `scdl_gui/` - the app. Downloads run in a separate worker process (`scdl-gui --worker ...`), so the window
-  never freezes. Non-UI logic (`engine`, `templates`, `matching`, `parsing`, `updates`) has no Qt and is unit-tested.
-- `tools/build.ps1` - builds `dist/scdl-gui-windows-x64.zip` with PyInstaller.
-- `tools/screenshots.py` - renders the README screenshots with demo data.
-
-### Releasing
-
-1. Bump `APP_VERSION` in `scdl_gui/__init__.py` and add a section to `CHANGELOG.md`.
-2. Commit, then tag and push: `git tag v1.1.0 && git push origin main v1.1.0`.
-3. GitHub Actions tests, builds and publishes the release; installed apps see the update within a day.
-
-Releasing every few weeks keeps the bundled yt-dlp fresh - SoundCloud and YouTube change often.
 
 ## License
 
