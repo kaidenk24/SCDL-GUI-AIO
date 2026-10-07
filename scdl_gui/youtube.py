@@ -132,7 +132,7 @@ def search_items(items: list[dict]) -> None:
                 result["error"] = errors[0][:300]
         except Exception as e:  # report and move on to the next track
             result["error"] = str(e)[:300]
-        print(MATCH_MARKER + json.dumps(result, ensure_ascii=False), flush=True)
+        worker.emit(MATCH_MARKER, result)
 
 
 # ---------------------------------------------------------------- download & tag
@@ -235,5 +235,5 @@ def main(args: list[str]) -> int:
         result.update(ok=True, path=saved, message=message)
     except Exception as e:  # report to the app instead of crashing the worker
         result.update(ok=False, message=str(e).strip().splitlines()[0][:300] if str(e).strip() else type(e).__name__)
-    print(DONE_MARKER + json.dumps(result, ensure_ascii=False), flush=True)
+    worker.emit(DONE_MARKER, result)
     return 0 if result["ok"] else 1

@@ -2,6 +2,8 @@
 
 ## 1.0.1
 
+- Fix DRM-protected tracks failing with "'charmap' codec can't encode character" instead of going to
+  YouTube matches, when the folder or track name had characters like `⧸` (packaged app only).
 - Fix garbled track names in the Activity log of the packaged app (e.g. `SATØS`, `⧸`, or a track
   shown as "uff0a"). Downloaded files were always named correctly; only the display was affected.
 

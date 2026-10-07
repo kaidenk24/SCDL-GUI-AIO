@@ -186,6 +186,12 @@ sc_extractor.SoundcloudBaseIE._extract_info_dict = lean_extract_info_dict
 
 # ---------------------------------------------------------------- DRM tracks -> YouTube match requests
 
+def emit(marker: str, payload: dict) -> None:
+    """A structured line for the app. ASCII-only JSON (non-ASCII is \\u-escaped inside the JSON), so it
+    survives any console encoding - a raw '⧸' in a path once crashed this on cp1252 pipes."""
+    print(marker + json.dumps(payload), flush=True)
+
+
 _drm_stash: dict = {}  # filled by the extractor, reported once the playlist position is known
 _output_templates: dict = {}  # in_playlist -> scdl output template
 _archive_path = ""
@@ -233,7 +239,7 @@ def report_drm(ydl: YoutubeDL, track: dict, extra: dict) -> None:
         "archive": _archive_path,
         "source_link": SOURCE_URL,
     }
-    print(DRM_MARKER + json.dumps(record, ensure_ascii=False), flush=True)
+    emit(DRM_MARKER, record)
 
 
 _original_extract_info = YoutubeDL.extract_info
@@ -386,7 +392,7 @@ def check_cookies():
     jar = extract_cookies_from_browser(BROWSER_NAME, PROFILE)
     soundcloud = any(c.name == "oauth_token" and c.domain.endswith("soundcloud.com") for c in jar)
     youtube = any(c.domain.endswith("youtube.com") and c.name in ("LOGIN_INFO", "SAPISID", "__Secure-3PAPISID") for c in jar)
-    print("@@LOGIN " + json.dumps({"soundcloud": soundcloud, "youtube": youtube}), flush=True)
+    emit("@@LOGIN ", {"soundcloud": soundcloud, "youtube": youtube})
 
 
 def describe_kind(url, info):
@@ -416,7 +422,7 @@ def describe(urls):
                 )
             except Exception as e:  # report per link, keep going
                 result["error"] = (str(e).strip().splitlines() or ["lookup failed"])[0][:200]
-            print("@@DESCRIBE " + json.dumps(result, ensure_ascii=False), flush=True)
+            emit("@@DESCRIBE ", result)
 
 
 def main(args):
