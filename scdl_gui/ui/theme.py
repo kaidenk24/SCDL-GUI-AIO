@@ -35,6 +35,7 @@ QListWidget#Nav {{ background: transparent; border: none; color: {SIDEBAR_TEXT};
 QListWidget#Nav::item {{ padding: 9px 12px; margin: 1px 10px; border-radius: 7px; }}
 QListWidget#Nav::item:selected {{ background: {SIDEBAR_ITEM}; color: #FFFFFF; border-left: 3px solid {ACCENT}; }}
 QListWidget#Nav::item:hover:!selected {{ background: #25211D; color: #FFFFFF; }}
+QListWidget#Nav[compact="true"]::item {{ padding: 9px 0px 9px 15px; margin: 1px 8px; }}
 
 QLabel#PageTitle {{ font-size: 19pt; font-weight: 600; }}
 QLabel#PageSubtitle, QLabel#Muted {{ color: {MUTED}; }}
@@ -87,7 +88,7 @@ QSlider::sub-page:horizontal:disabled {{ background: {BORDER_STRONG}; }}
 
 QRadioButton, QCheckBox {{ spacing: 8px; padding: 2px 0; }}
 QToolTip {{ background: {SIDEBAR}; color: #FFFFFF; border: none; padding: 6px 8px; border-radius: 4px; }}
-QSplitter::handle {{ background: transparent; width: 10px; }}
+QSplitter::handle {{ background: transparent; }}
 QMenu {{ background: {SURFACE}; border: 1px solid {BORDER}; padding: 4px; }}
 QMenu::item {{ padding: 6px 22px; border-radius: 4px; }}
 QMenu::item:selected {{ background: {ACCENT_SOFT}; }}

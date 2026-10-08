@@ -14,6 +14,7 @@ from scdl_gui import APP_ID, APP_NAME, APP_VERSION, GITHUB_URL
 
 REQUIRED_MODULES = {"yt_dlp": "yt-dlp", "scdl": "scdl", "mutagen": "mutagen"}
 LOCK_WAIT_MS = 4000  # an updated copy restarting waits for the old one to close
+BACKGROUND_ARG = "--background"  # same as system.BACKGROUND_ARG (not imported: keeps worker start-up light)
 TEMP_MAX_AGE_SECONDS = 24 * 60 * 60
 
 
@@ -78,7 +79,8 @@ def _missing_modules() -> list[str]:
     return [package for module, package in REQUIRED_MODULES.items() if importlib.util.find_spec(module) is None]
 
 
-def _run_app() -> int:
+def _run_app(background: bool = False) -> int:
+    """background: started with Windows - stay in the notification area (only if playlists are followed)."""
     from PySide6.QtCore import QLockFile
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication, QMessageBox
@@ -87,6 +89,8 @@ def _run_app() -> int:
     from scdl_gui.ui.main_window import MainWindow
     from scdl_gui.ui.state import AppState
     from scdl_gui.ui.theme import apply_theme
+    from scdl_gui.ui.tray import request_show
+    from scdl_gui.watches import load_watches
 
     folder = data_dir()
     _setup_logging(folder)
@@ -95,13 +99,20 @@ def _run_app() -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setWindowIcon(QIcon(str(resource_path("assets", "icon.ico"))))
+    app.setQuitOnLastWindowClosed(False)  # the window may hide in the notification area; it quits itself
     apply_theme(app)
 
     lock = QLockFile(str(folder / "app.lock"))
     lock.setStaleLockTime(0)
-    if not lock.tryLock(LOCK_WAIT_MS):
-        QMessageBox.information(None, APP_NAME, f"{APP_NAME} is already open.")
-        return 0
+    if not lock.tryLock(0):
+        if background or request_show(folder):  # the running copy brings its window forward
+            return 0
+        if not lock.tryLock(LOCK_WAIT_MS):  # e.g. an updated copy waiting for the old one to close
+            QMessageBox.information(None, APP_NAME, f"{APP_NAME} is already open.")
+            return 0
+    if background and not any(w.enabled for w in load_watches()):
+        lock.unlock()
+        return 0  # nothing to keep up to date
 
     missing = _missing_modules()
     if missing:
@@ -128,7 +139,9 @@ def _run_app() -> int:
 
     clean_update_leftovers()
     window = MainWindow(AppState(load_settings()))
-    window.show()
+    if not background:
+        window.show()
+    window.update_tray()
     try:
         return app.exec()
     finally:
@@ -153,7 +166,7 @@ def main(args: list[str]) -> int:
         return _run_worker(args[1:])
     if args[:1] == ["--install-update"]:
         return _run_installer(args[1:])
-    return _run_app()
+    return _run_app(background=BACKGROUND_ARG in args)
 
 
 def run() -> None:

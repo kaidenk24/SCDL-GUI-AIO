@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QPlainTextEdit,
     QPushButton,
-    QSplitter,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -34,7 +33,7 @@ from scdl_gui.ui.queue_model import (
     key_to_folder,
 )
 from scdl_gui.ui.state import AppState
-from scdl_gui.ui.widgets import Card, Page, hbox, label
+from scdl_gui.ui.widgets import Card, FlowRow, Page, ResponsiveSplitter, hbox, label
 
 PASTE_HINT = (
     "Paste SoundCloud links here - playlists, albums, your likes, a profile, single tracks or "
@@ -45,9 +44,10 @@ PASTE_HINT = (
 class QueuePage(Page):
     links_added = Signal(list)  # new links, to look up their names
     lookup_requested = Signal(list)
+    follow_requested = Signal(list)  # Jobs to follow on the Playlists page
 
     def __init__(self, state: AppState, model: QueueModel) -> None:
-        super().__init__("Queue", "Add links, choose where each one is saved, then press Start.", scroll=False)
+        super().__init__("Queue", "Add links, choose where each one is saved, then press Start.")
         self._state = state
         self._model = model
         self.body.addWidget(self._build_add_card())
@@ -88,8 +88,9 @@ class QueuePage(Page):
         QShortcut(QKeySequence("Ctrl+Return"), self.paste, activated=self._add_from_box)
         return card
 
-    def _build_queue(self) -> QSplitter:
+    def _build_queue(self) -> ResponsiveSplitter:
         self.table = QTableView()
+        self.table.setMinimumHeight(180)
         self.table.setModel(self._model)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
@@ -106,10 +107,13 @@ class QueuePage(Page):
         self.table.customContextMenuRequested.connect(self._context_menu)
         self.table.clicked.connect(self._on_click)
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(COL_NAME, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((COL_ON, 34), (COL_TYPE, 96), (COL_FOLDER, 180), (COL_STATUS, 210)):
-            header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
-            self.table.setColumnWidth(col, width)
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(34)
+        for col, mode in ((COL_ON, "Fixed"), (COL_NAME, "Stretch"), (COL_TYPE, "ResizeToContents"),
+                          (COL_FOLDER, "Interactive"), (COL_STATUS, "Stretch")):
+            header.setSectionResizeMode(col, getattr(QHeaderView.ResizeMode, mode))
+        self.table.setColumnWidth(COL_ON, 34)
+        self.table.setColumnWidth(COL_FOLDER, 170)
         self.table.setColumnHidden(COL_LINK, True)  # shown as the Name tooltip and in the right-click menu
         self.delegate = FolderDelegate(
             lambda: folder_choices(self._state.settings.folders), self._on_new_folder, self.table
@@ -133,17 +137,15 @@ class QueuePage(Page):
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.addWidget(self.table, 1)
-        left_layout.addLayout(hbox(remove, clear_done, clear_all, lookup, None, self.summary))
+        left_layout.addWidget(FlowRow(remove, clear_done, clear_all, lookup))
+        left_layout.addWidget(self.summary)
 
         self.folders = FoldersPanel(self._state, self._model)
         self.folders.assign_requested.connect(lambda folder: self._model.set_folder(self.selected_rows(), folder))
-        self.folders.setMinimumWidth(230)
+        self.folders.setMinimumWidth(210)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(left)
-        splitter.addWidget(self.folders)
+        splitter = ResponsiveSplitter(left, self.folders, stack_below=760, wide_sizes=(800, 260), stacked_sizes=(320, 260))
         splitter.setStretchFactor(0, 1)
-        splitter.setSizes([800, 260])
         return splitter
 
     # ---- adding links
@@ -203,6 +205,9 @@ class QueuePage(Page):
             move.addAction(text, lambda f=folder: self._model.set_folder(rows, f))
         menu.addSeparator()
         menu.addAction("Download again", lambda: [self._model.update(r, status="Queued", enabled=True) for r in rows])
+        follow = menu.addAction("Follow - download new tracks automatically",
+                                lambda: self.follow_requested.emit([self._model.job(r) for r in rows]))
+        follow.setEnabled(any(self._model.job(r).kind != "Track" for r in rows))
         menu.addAction("Look up name", lambda: self.lookup_requested.emit([self._model.job(r).url for r in rows]))
         menu.addAction("Open on SoundCloud", lambda: [QDesktopServices.openUrl(QUrl(self._model.job(r).url)) for r in rows[:5]])
         menu.addAction("Copy link", lambda: QGuiApplication.clipboard().setText("\n".join(self._model.job(r).url for r in rows)))

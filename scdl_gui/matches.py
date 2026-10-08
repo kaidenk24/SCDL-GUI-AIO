@@ -71,3 +71,14 @@ def load_matches() -> list[MatchItem]:
 
 def save_matches(items: list[MatchItem]) -> None:
     _write_json(data_dir() / "matches.json", [asdict(item) for item in items])
+
+
+def load_skipped() -> set[str]:
+    """Keys of tracks you skipped. Scheduled checks of followed playlists don't ask about them again
+    (a download you start yourself still does)."""
+    raw = _read_json(data_dir() / "matches-skipped.json")
+    return {key for key in raw if isinstance(key, str)} if isinstance(raw, list) else set()
+
+
+def save_skipped(keys: set[str]) -> None:
+    _write_json(data_dir() / "matches-skipped.json", sorted(keys))

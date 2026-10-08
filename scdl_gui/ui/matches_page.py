@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
-    QSplitter,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -35,13 +34,15 @@ from scdl_gui.matches import (
     MatchItem,
     item_key,
     load_matches,
+    load_skipped,
     save_matches,
+    save_skipped,
 )
 from scdl_gui.matching import STRONG_MATCH, format_duration
 from scdl_gui.runner import MatchDownloadRunner, MatchSearchRunner
 from scdl_gui.ui import theme
 from scdl_gui.ui.state import AppState
-from scdl_gui.ui.widgets import Card, Page, hbox, label
+from scdl_gui.ui.widgets import Card, FlowRow, Page, ResponsiveSplitter, hbox, label
 
 STATUS_COLORS = {
     SEARCHING: theme.MUTED, REVIEW: theme.ACCENT, NO_MATCH: theme.WARNING, DOWNLOADING: theme.MUTED,
@@ -63,10 +64,12 @@ class MatchesPage(Page):
             "SoundCloud won't let anyone download DRM-protected tracks, so the app looks for the same song on "
             "YouTube. Check the match (press Listen if unsure) and it's saved where the SoundCloud track would "
             "have gone, with the same name and tags.",
-            scroll=False,
         )
         self._state = state
         self._items: list[MatchItem] = load_matches()
+        self._skipped: set[str] = load_skipped()
+        self._detail_state: tuple | None = None  # what the detail card shows, to skip needless redraws
+        self._candidates_key = ""
         self.searcher = MatchSearchRunner(self)
         self.searcher.found.connect(self._on_found)
         self.downloader = MatchDownloadRunner(self)
@@ -78,17 +81,20 @@ class MatchesPage(Page):
         accept.clicked.connect(self._accept_strong)
         clear = QPushButton("Remove finished")
         clear.clicked.connect(self._remove_finished)
-        self.body.addLayout(hbox(self.summary, None, accept, clear))
+        self.summary.setWordWrap(True)
+        top = hbox(self.summary, FlowRow(accept, clear), spacing=16)
+        top.setStretch(0, 1)
+        self.body.addLayout(top)
 
         self.list = QListWidget()
         self.list.setObjectName("Folders")
-        self.list.setMinimumWidth(280)
+        self.list.setMinimumSize(210, 120)
+        self.list.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.currentRowChanged.connect(lambda _row: self._show_selected())
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.list)
-        splitter.addWidget(self._build_detail())
+        splitter = ResponsiveSplitter(self.list, self._build_detail(), stack_below=820,
+                                      wide_sizes=(300, 700), stacked_sizes=(150, 500))
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([330, 760])
         self.body.addWidget(splitter, 1)
 
         self._refresh_list()
@@ -113,10 +119,11 @@ class MatchesPage(Page):
         self.candidates.setAlternatingRowColors(True)
         self.candidates.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.candidates.itemDoubleClicked.connect(lambda item, _c: self._open(item.data(0, Qt.ItemDataRole.UserRole)))
+        self.candidates.setMinimumHeight(150)
         header = self.candidates.header()
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((0, 70), (2, 190), (3, 100), (4, 110)):
-            self.candidates.setColumnWidth(col, width)
+        header.setStretchLastSection(False)
+        for col, mode in ((0, "ResizeToContents"), (1, "Stretch"), (2, "Stretch"), (3, "ResizeToContents"), (4, "ResizeToContents")):
+            header.setSectionResizeMode(col, getattr(QHeaderView.ResizeMode, mode))
         card.body.addWidget(label("Matches (best first - double-click to listen):", "CardTitle"))
         card.body.addWidget(self.candidates, 1)
 
@@ -152,13 +159,20 @@ class MatchesPage(Page):
         return holder
 
     # ---- public
-    def add_track(self, track: dict) -> None:
+    def add_track(self, track: dict, scheduled: bool = False) -> None:
+        """A DRM-protected track to match. scheduled: reported by an automatic check of a followed
+        playlist, which reports the same tracks every time - only new ones are added then."""
         key = item_key(track)
         existing = next((i for i in self._items if i.key == key), None)
+        if scheduled and (existing is not None or key in self._skipped):
+            return
         if existing is not None and existing.status not in (SKIPPED, FAILED):
             return
         if existing is not None:
             self._items.remove(existing)
+        if key in self._skipped:  # downloading the playlist yourself asks again
+            self._skipped.discard(key)
+            save_skipped(self._skipped)
         item = MatchItem(track=track)
         self._items.append(item)
         self._search([item])
@@ -216,6 +230,8 @@ class MatchesPage(Page):
         item = self._current()
         if item is not None:
             item.status = SKIPPED
+            self._skipped.add(item.key)
+            save_skipped(self._skipped)
             self._changed()
 
     def _search_again(self) -> None:
@@ -250,18 +266,27 @@ class MatchesPage(Page):
         self.needs_user_changed.emit(self.needs_user())
 
     def _refresh_list(self) -> None:
+        """Update the list in place: rows keep their position, and the selection and scroll position stay
+        where they are when another track's status changes (rebuilding the list made it jump)."""
         current = self._current()
         self.list.blockSignals(True)
-        self.list.clear()
-        for item in self._items:
+        wanted = [item.key for item in self._items]
+        for row in reversed(range(self.list.count())):
+            if self.list.item(row).data(Qt.ItemDataRole.UserRole) not in wanted:
+                self.list.takeItem(row)
+        for row, item in enumerate(self._items):
+            entry = self.list.item(row)
+            if entry is None or entry.data(Qt.ItemDataRole.UserRole) != item.key:
+                entry = QListWidgetItem()
+                entry.setData(Qt.ItemDataRole.UserRole, item.key)
+                self.list.insertItem(row, entry)
             playlist = item.track.get("playlist") or "single track"
-            entry = QListWidgetItem(f"{item.label}\n{playlist}  -  {STATUS_TEXT.get(item.status, item.status)}")
-            entry.setForeground(QColor(STATUS_COLORS.get(item.status, theme.TEXT)))
-            entry.setData(Qt.ItemDataRole.UserRole, item.key)
-            self.list.addItem(entry)
-            if current is not None and item.key == current.key:
-                self.list.setCurrentItem(entry)
-        if self.list.currentRow() < 0 and self._items:
+            text = f"{item.label}\n{playlist}  -  {STATUS_TEXT.get(item.status, item.status)}"
+            if entry.text() != text:
+                entry.setText(text)
+                entry.setToolTip(item.label)
+                entry.setForeground(QColor(STATUS_COLORS.get(item.status, theme.TEXT)))
+        if self.list.currentItem() is None and self._items:
             first_open = next((n for n, i in enumerate(self._items) if i.status in NEEDS_USER), 0)
             self.list.setCurrentRow(first_open)
         self.list.blockSignals(False)
@@ -270,12 +295,19 @@ class MatchesPage(Page):
             f"{self.needs_user()} waiting for you  -  {counts[SEARCHING]} searching  -  "
             f"{counts[DOWNLOADING]} downloading  -  {counts[SAVED]} saved" if self._items else ""
         )
-        self._show_selected()
+        shown = self._current()
+        if shown is None or current is None or shown.key != current.key or self._detail_state != self._state_of(shown):
+            self._show_selected()
+
+    @staticmethod
+    def _state_of(item: MatchItem) -> tuple:
+        return item.key, item.status, item.query, item.chosen_url, item.message, len(item.candidates)
 
     def _show_selected(self) -> None:
         item = self._current()
         self.detail.setVisible(item is not None)
         self.empty.setVisible(item is None)
+        self._detail_state = self._state_of(item) if item is not None else None
         if item is None:
             return
         track = item.track
@@ -301,6 +333,8 @@ class MatchesPage(Page):
         self.detail_message.setText(message)
 
     def _fill_candidates(self, item: MatchItem) -> None:
+        picked = self._selected_candidate_url() if item.key == self._candidates_key else ""
+        self._candidates_key = item.key
         self.candidates.clear()
         source_length = item.track.get("duration")
         for cand in item.candidates:
@@ -315,7 +349,9 @@ class MatchesPage(Page):
             if cand["url"] == item.chosen_url:
                 row.setText(1, f"{cand['title']}   (chosen)")
             self.candidates.addTopLevelItem(row)
-        if self.candidates.topLevelItemCount():
+            if cand["url"] == picked:
+                self.candidates.setCurrentItem(row)
+        if self.candidates.currentItem() is None and self.candidates.topLevelItemCount():
             self.candidates.setCurrentItem(self.candidates.topLevelItem(0))
 
     # ---- helpers

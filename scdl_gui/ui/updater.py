@@ -202,6 +202,7 @@ class UpdateController(QObject):
             self._quit()
 
     def _quit(self) -> None:
-        """Close through the window (saves the queue and settings), then leave the event loop."""
-        self._parent.close()
+        """Close through the window (saves the queue and settings), then leave the event loop. quit_app()
+        closes for real instead of hiding in the notification area."""
+        getattr(self._parent, "quit_app", self._parent.close)()
         QApplication.quit()

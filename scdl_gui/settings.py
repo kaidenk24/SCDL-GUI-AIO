@@ -20,6 +20,7 @@ FOLDER_ROOT = ""  # straight into the library folder
 ARCHIVE_MODES = ("shared", "per_link", "files")
 QUALITIES = ("V0", "320", "256", "V2", "192")
 ALBUM_MODES = ("title", "playlist", "none")
+WATCH_INTERVALS = (1, 3, 6, 12, 24)  # hours between checks of followed playlists
 # Browsers yt-dlp can borrow cookies from. Firefox is the most reliable on Windows: recent
 # Chromium browsers encrypt their cookies in a way that often can't be read while they run.
 BROWSERS = ("firefox", "librewolf", "chrome", "edge", "brave", "opera", "vivaldi", "chromium")
@@ -58,6 +59,10 @@ class Settings:
     last_update_check: float = 0.0  # epoch seconds
     skipped_version: str = ""  # "Skip this version" on the update banner
     offered_shortcuts: bool = False  # first-run "add shortcuts?" question was asked
+    watch_interval_hours: int = 3  # how often followed playlists are checked for new tracks
+    run_in_background: bool = True  # closing the window keeps checking from the notification area
+    start_with_windows: bool = False  # start hidden in the notification area when Windows starts
+    tray_hint_shown: bool = False  # "still running in the notification area" was explained once
 
     def with_changes(self, **changes) -> Settings:
         return replace(self, **changes)
@@ -129,6 +134,8 @@ def _validated(settings: Settings) -> Settings:
         changes["max_tracks"] = 0
     if settings.cookie_browser not in BROWSERS:
         changes["cookie_browser"] = "firefox"
+    if settings.watch_interval_hours not in WATCH_INTERVALS:
+        changes["watch_interval_hours"] = 3
     if settings.album_mode not in ALBUM_MODES:
         changes["album_mode"] = "title"
     if not settings.library:

@@ -81,7 +81,7 @@ class DownloadRunner(QObject):
 
     job_started = Signal(int)  # queue row
     job_progress = Signal(int, int, int, str)  # row, item, total, current track
-    job_finished = Signal(int, str)  # row, status text
+    job_finished = Signal(int, str, object)  # row, status text, JobCounts of that link
     job_named = Signal(int, str)  # row, playlist name seen while downloading
     drm_found = Signal(dict)  # a DRM-protected track to match on YouTube
     log = Signal(str, str)  # level (info/ok/skip/error/warn/detail), text
@@ -195,7 +195,7 @@ class DownloadRunner(QObject):
             status = "Failed" if counts.failed else "Failed - see Activity"
         else:
             status = f"Done - {counts.summary()}"
-        self.job_finished.emit(self._row, status)
+        self.job_finished.emit(self._row, status, counts)
         self.log.emit("info", f"  {status}")
         if self._process is not None:
             self._process.deleteLater()

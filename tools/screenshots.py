@@ -1,12 +1,13 @@
 """Renders the app's pages to PNGs with made-up demo data (for the README and for checking the UI).
 
-Usage: python tools/screenshots.py OUTPUT_DIR
+Usage: python tools/screenshots.py OUTPUT_DIR [WIDTHxHEIGHT]   (default 1280x820)
 Uses a throwaway settings folder, so your real settings and queue are never touched.
 Tip: set QT_QPA_PLATFORM=offscreen and QT_QPA_FONTDIR=C:\\Windows\\Fonts to render without a window.
 """
 
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -28,6 +29,7 @@ from scdl_gui.matches import REVIEW, MatchItem, save_matches  # noqa: E402
 setup_page.find_ffmpeg = lambda _settings: "C:\\Program Files\\FFmpeg\\bin\\ffmpeg.exe"
 setup_page.find_js_runtime = lambda: "C:\\Program Files\\nodejs\\node.exe"
 from scdl_gui.settings import Job, Settings, save_queue  # noqa: E402
+from scdl_gui.watches import Watch, save_watches  # noqa: E402
 from scdl_gui.ui.main_window import NAV, MainWindow  # noqa: E402
 from scdl_gui.ui.state import AppState  # noqa: E402
 from scdl_gui.ui.theme import apply_theme  # noqa: E402
@@ -38,6 +40,17 @@ DEMO_QUEUE = [
     Job("https://soundcloud.com/djexample/likes", None, True, "djexample (Likes)", "Likes", "Queued"),
     Job("https://soundcloud.com/djexample/sets/wedding-party", "Wedding", True, "Wedding Party", "Playlist", "Queued"),
     Job("https://soundcloud.com/nightowl/night-drive", "", False, "Night Drive  (nightowl)", "Track", "Done - 1 new"),
+]
+_NOW = time.time()
+DEMO_WATCHES = [
+    Watch("https://soundcloud.com/djexample/sets/summer-house", None, "Summer House", "Playlist", True,
+          _NOW - 40 * 60, "2 new tracks", _NOW - 40 * 60, 14),
+    Watch("https://soundcloud.com/djexample/sets/gym-mix", "Gym\\{playlist}", "Gym Mix", "Playlist", True,
+          _NOW - 40 * 60, "Up to date", 0.0, 3),
+    Watch("https://soundcloud.com/djexample/likes", "Likes", "djexample (Likes)", "Likes", True,
+          _NOW - 2 * 3600, "1 new track, 1 to match on YouTube", _NOW - 2 * 3600, 37),
+    Watch("https://soundcloud.com/djexample/sets/wedding-party", "Wedding", "Wedding Party", "Playlist", False,
+          _NOW - 3 * 86400, "Up to date", 0.0, 0),
 ]
 DEMO_MATCH = MatchItem(
     track={
@@ -55,17 +68,20 @@ DEMO_MATCH = MatchItem(
 )
 
 
-def main(out_dir: str) -> None:
+def main(out_dir: str, size: str = "1280x820") -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     save_queue(DEMO_QUEUE)
     save_matches([DEMO_MATCH])
+    save_watches(DEMO_WATCHES)
     app = QApplication(sys.argv)
     apply_theme(app)
     library = str(Path.home() / "Music" / "SoundCloud").replace(str(Path.home()), "C:\\Users\\you")
-    settings = Settings(library=library, folders=("Gym", "Wedding", "E:\\Car"), offered_shortcuts=True, check_updates=False)
+    settings = Settings(library=library, folders=("Gym", "Wedding", "Likes", "E:\\Car"), offered_shortcuts=True, check_updates=False)
     window = MainWindow(AppState(settings))
-    window.resize(1280, 820)
+    width, height = (int(n) for n in size.lower().split("x"))
+    window.setMinimumSize(0, 0)
+    window.resize(width, height)
     window.show()
     for level, text in (
         ("info", "> Summer House"), ("ok", "  + Golden Hour"), ("skip", "  = already have: Night Drive"),
@@ -87,4 +103,4 @@ def main(out_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(*sys.argv[1:3])

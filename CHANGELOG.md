@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0
+
+- New **Playlists** page: follow playlists, likes or profiles, each with its own folder. The app checks them
+  every 1-24 hours (your choice) and downloads tracks added since the last check. Checks wait while you're
+  downloading something yourself, and while the library drive isn't connected. A check that fails (e.g.
+  no internet after waking from sleep) is tried again after 15 minutes.
+- The app can keep checking from the notification area when the window is closed, and start with Windows.
+  Opening it again brings the running window forward instead of saying it's already open.
+- Right-click links in the queue -> *Follow* to keep them up to date.
+- YouTube matches: the list no longer jumps when a track's status changes, and the match you picked stays
+  selected. Tracks you skip aren't asked about again by automatic checks.
+- Works on any screen size: pages scroll instead of squashing, side panels move underneath on narrow
+  windows, button rows wrap, the sidebar shows icons only below 1100 px, settings pages don't stretch across
+  wide screens, and the window opens at a size that fits the screen (and back on screen if a monitor was
+  removed).
+
 ## 1.0.3
 
 - New Album tag setting (Account & tags): song title (new default), playlist name, or none. With the

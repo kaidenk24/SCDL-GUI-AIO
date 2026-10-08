@@ -11,6 +11,9 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
 
 - **Paste and go** - playlists, albums, your likes, profiles, stations, single tracks and `on.soundcloud.com`
   share links. Names are looked up for you.
+- **Follow playlists** - follow a playlist (or likes, or a profile) with its own folder, and the app checks it
+  every few hours and downloads tracks as they're added. Keeps checking from the notification area with the
+  window closed, and can start with Windows.
 - **Folders your way** - one folder per playlist by default, or build your own layout and file names from
   tokens like `{playlist}`, `{artist}`, `{index}`, with a live preview. Make your own folders and drag links
   into them, or send them anywhere on your PC.
@@ -29,9 +32,9 @@ organised into folders exactly the way you want. Built on [scdl](https://github.
   "too many requests" answer instead of skipping tracks.
 - **Keeps itself up to date** - checks GitHub for new versions and updates in place.
 
-| Save layout | YouTube matches |
+| Playlists | YouTube matches |
 | --- | --- |
-| ![Save layout](docs/screenshots/save-layout.png) | ![YouTube matches](docs/screenshots/youtube-matches.png) |
+| ![Playlists](docs/screenshots/playlists.png) | ![YouTube matches](docs/screenshots/youtube-matches.png) |
 
 ## Install
 
@@ -67,6 +70,17 @@ app updates itself with `git pull` when a new version is out.
 4. **Account & tags** - which browser to borrow your SoundCloud/YouTube login from, and tag options.
 5. Press **Start downloads**. **Activity** shows every saved, skipped and failed track.
 6. **YouTube matches** - confirm replacements for DRM-protected tracks (*Listen* first if unsure).
+7. **Playlists** - paste a link, pick its folder and press *Follow* (or right-click links in the queue ->
+   *Follow*). The first check downloads what you don't have yet; after that only new tracks. Choose how often
+   it checks, and whether it keeps checking from the notification area when you close the window.
+
+### Followed playlists
+
+Checks happen only while the app is running. With *Keep checking from the notification area* on (the
+default), closing the window leaves the app running by the clock - right-click its icon to quit. *Start with
+Windows* adds a shortcut to your Startup folder that opens the app there without a window. A check never
+runs at the same time as downloads you started yourself; it waits until they're done. If the library is on
+a drive that isn't connected, checks wait until it is.
 
 ### Logins
 
@@ -89,7 +103,7 @@ can also be pasted by hand on Account & tags.
 
 | What | Where |
 | --- | --- |
-| Settings, queue, logs | `%APPDATA%\SoundCloud Downloader\` |
+| Settings, queue, followed playlists, logs | `%APPDATA%\SoundCloud Downloader\` |
 | PO-token generator (if set up) | `%APPDATA%\SoundCloud Downloader\potoken\` |
 | Downloaded music | your library folder (default `Music\SoundCloud`) |
 | Failed tracks | `soundcloud-failed.txt` in the library folder |

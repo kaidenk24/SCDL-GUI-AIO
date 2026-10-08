@@ -22,13 +22,33 @@ from scdl_gui.settings import FOLDER_AUTO, FOLDER_ROOT
 from scdl_gui.templates import clean_folder_name
 from scdl_gui.ui.queue_model import MIME_ROWS, QueueModel, folder_choices, folder_to_key, key_to_folder
 from scdl_gui.ui.state import AppState
-from scdl_gui.ui.widgets import hbox, label
+from scdl_gui.ui.widgets import FlowRow, label
 
 NEW_FOLDER_HINT = (
     "Folder name inside your library.\n"
     "Use \\ for subfolders (Gym\\Warm-up) and tokens like {playlist} to keep\n"
     "one subfolder per playlist inside it (Gym\\{playlist})."
 )
+
+
+def resolve_folder(library: str, folder: str | None) -> Path:
+    """Real folder on disk for a 'Save to' choice (up to the first {token})."""
+    if not folder:
+        return Path(library)
+    fixed = re.split(r"\{", folder, maxsplit=1)[0].rstrip("\\/")
+    return Path(fixed) if Path(fixed).drive else Path(library) / fixed
+
+
+def ask_new_folder(parent: QWidget) -> str:
+    """Name of a new folder inside the library, or "" if cancelled."""
+    name, ok = QInputDialog.getText(parent, "New folder", NEW_FOLDER_HINT)
+    return clean_folder_name(name) if ok else ""
+
+
+def ask_other_location(parent: QWidget, start: str) -> str:
+    """Any folder on the computer, or "" if cancelled."""
+    path = QFileDialog.getExistingDirectory(parent, "Save into this folder", start)
+    return os.path.normpath(path) if path else ""
 
 
 class FolderList(QListWidget):
@@ -81,6 +101,7 @@ class FoldersPanel(QWidget):
         self.list = FolderList()
         self.list.rows_dropped.connect(lambda rows, folder: self._model.set_folder(rows, folder))
         self.list.itemDoubleClicked.connect(lambda _item: self._rename())
+        self.list.setMinimumHeight(110)
         layout.addWidget(self.list, 1)
 
         send = QPushButton("Send selected links here")
@@ -93,14 +114,14 @@ class FoldersPanel(QWidget):
         pick.setToolTip("Save into any folder on your computer, outside the library")
         new.clicked.connect(self._new_folder)
         pick.clicked.connect(self._pick_location)
-        layout.addLayout(hbox(new, pick))
+        layout.addWidget(FlowRow(new, pick))
 
         rename, delete, open_ = QPushButton("Rename"), QPushButton("Delete"), QPushButton("Open")
         rename.clicked.connect(self._rename)
         delete.clicked.connect(self._delete)
         open_.clicked.connect(self._open)
         open_.setToolTip("Open this folder in File Explorer")
-        layout.addLayout(hbox(rename, delete, open_))
+        layout.addWidget(FlowRow(rename, delete, open_))
 
         state.settings_changed.connect(lambda _s: self.refresh())
         model.changed.connect(self.refresh)
@@ -132,13 +153,7 @@ class FoldersPanel(QWidget):
         return str(self.resolve(folder))
 
     def resolve(self, folder: str | None) -> Path:
-        """Real folder on disk (up to the first {token})."""
-        library = Path(self._state.settings.library)
-        if not folder:
-            return library
-        fixed = re.split(r"\{", folder, maxsplit=1)[0].rstrip("\\/")
-        path = Path(fixed) if Path(fixed).drive else library / fixed
-        return path
+        return resolve_folder(self._state.settings.library, folder)
 
     # ---- actions
     def add_folder(self, name: str) -> None:
@@ -153,14 +168,14 @@ class FoldersPanel(QWidget):
                 self.list.setCurrentRow(i)
 
     def _new_folder(self) -> None:
-        name, ok = QInputDialog.getText(self, "New folder", NEW_FOLDER_HINT)
-        if ok and name.strip():
+        name = ask_new_folder(self)
+        if name:
             self.add_folder(name)
 
     def _pick_location(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Save into this folder", self._state.settings.library)
+        path = ask_other_location(self, self._state.settings.library)
         if path:
-            self.add_folder(os.path.normpath(path))
+            self.add_folder(path)
 
     def _custom_selected(self) -> str | None:
         folder = self.selected_folder()

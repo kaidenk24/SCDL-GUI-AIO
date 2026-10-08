@@ -18,7 +18,7 @@ MAX_ENTRIES = 20000
 
 class ActivityPage(Page):
     def __init__(self, state: AppState) -> None:
-        super().__init__("Activity", "Everything the downloader is doing. Green = saved, grey = already had, red = failed.", scroll=False)
+        super().__init__("Activity", "Everything the downloader is doing. Green = saved, grey = already had, red = failed.")
         self._state = state
         self._entries: deque[tuple[str, str, str]] = deque(maxlen=MAX_ENTRIES)
 
