@@ -23,6 +23,7 @@ from scdl_gui import worker
 from scdl_gui.engine import has_pot_plugin
 from scdl_gui.matching import Candidate, build_query, rank
 
+
 def _js_runtimes() -> dict:
     """The runtime the app found ('node:C:\\...\\node.exe'), else let yt-dlp look on PATH."""
     name, _, path = (os.environ.get("SCDL_JS_RUNTIME") or "").partition(":")

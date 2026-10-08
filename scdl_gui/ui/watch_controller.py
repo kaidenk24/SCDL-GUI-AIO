@@ -187,7 +187,8 @@ class WatchController(QObject):
         url = self._url(row)
         self._live[url] = CHECKING
         watch = self._find(url)
-        self.status.emit(f"Checking followed playlist {row + 1} of {len(self._run_urls)}: {watch.name or url if watch else url}")
+        name = (watch.name or url) if watch else url
+        self.status.emit(f"Checking followed playlist {row + 1} of {len(self._run_urls)}: {name}")
         self.changed.emit()
 
     def _on_job_progress(self, row: int, item: int, total: int, _track: str) -> None:

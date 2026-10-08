@@ -236,7 +236,8 @@ def git_update() -> str:
     root = app_dir()
     steps = [
         ["git", "-C", str(root), "pull", "--ff-only"],
-        [console_python(), "-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", str(root / "requirements.txt")],
+        [console_python(), "-m", "pip", "install", "--disable-pip-version-check", "-q",
+         "-r", str(root / "requirements.txt")],
     ]
     log = []
     for command in steps:

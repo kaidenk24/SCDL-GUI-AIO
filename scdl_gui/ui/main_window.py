@@ -28,6 +28,7 @@ from scdl_gui.engine import find_ffmpeg, guess_kind
 from scdl_gui.parsing import JobCounts
 from scdl_gui.runner import DownloadRunner, LoginChecker, LookupRunner
 from scdl_gui.settings import data_dir, load_queue, resource_path, save_queue, save_settings
+from scdl_gui.system import create_shortcuts, shortcut_folders
 from scdl_gui.ui import theme
 from scdl_gui.ui.account_page import AccountPage
 from scdl_gui.ui.activity_page import ActivityPage
@@ -37,7 +38,6 @@ from scdl_gui.ui.matches_page import MatchesPage
 from scdl_gui.ui.playlists_page import PlaylistsPage
 from scdl_gui.ui.queue_model import QueueModel
 from scdl_gui.ui.queue_page import QueuePage
-from scdl_gui.system import create_shortcuts, shortcut_folders
 from scdl_gui.ui.setup_page import SetupPage
 from scdl_gui.ui.state import AppState
 from scdl_gui.ui.tray import ShowRequestWatcher, Tray
@@ -227,7 +227,9 @@ class MainWindow(QMainWindow):
     # ---- wiring
     def _wire(self) -> None:
         state = self._state
-        self._save_settings_timer = QTimer(self, singleShot=True, interval=400, timeout=lambda: save_settings(state.settings))
+        self._save_settings_timer = QTimer(
+            self, singleShot=True, interval=400, timeout=lambda: save_settings(state.settings)
+        )
         self._save_queue_timer = QTimer(self, singleShot=True, interval=600, timeout=lambda: save_queue(self._model.jobs))
         state.settings_changed.connect(self._on_settings_changed)
         self._model.changed.connect(self._save_queue_timer.start)

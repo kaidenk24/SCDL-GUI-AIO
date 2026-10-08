@@ -11,7 +11,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scdl_gui import settings as settings_mod, watches  # noqa: E402
+from scdl_gui import settings as settings_mod  # noqa: E402
+from scdl_gui import watches
 from scdl_gui.parsing import JobCounts  # noqa: E402
 from scdl_gui.watches import Watch  # noqa: E402
 

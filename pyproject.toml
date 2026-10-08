@@ -50,4 +50,11 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
-ignore = ["E731"]
+# B008: `parent=QModelIndex()` defaults are the standard Qt model idiom (QModelIndex is an immutable value).
+ignore = ["E731", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Stylesheet rules and test/demo data read best one per line.
+"scdl_gui/ui/theme.py" = ["E501"]
+"tests/*" = ["E501"]
+"tools/screenshots.py" = ["E501"]

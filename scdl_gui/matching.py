@@ -57,7 +57,9 @@ def song_and_artist(track: dict) -> tuple[str, str]:
     title = clean_title(track.get("title", ""))
     artist = (track.get("artist") or "").strip()
     parts = _SPLIT_ARTIST.split(title, maxsplit=1)
-    if len(parts) == 2 and (not artist or normalize(parts[0]) in normalize(artist) or normalize(artist) in normalize(parts[0])):
+    if len(parts) == 2 and (
+        not artist or normalize(parts[0]) in normalize(artist) or normalize(artist) in normalize(parts[0])
+    ):
         return parts[1].strip(), artist or parts[0].strip()
     return title, artist or (track.get("uploader") or "").strip()
 

@@ -16,7 +16,7 @@ def gradient_tile() -> Image.Image:
     draw = ImageDraw.Draw(tile)
     for y in range(SIZE):
         t = y / (SIZE - 1)
-        color = tuple(round(a + (b - a) * t) for a, b in zip(ORANGE_TOP, ORANGE_BOTTOM))
+        color = tuple(round(a + (b - a) * t) for a, b in zip(ORANGE_TOP, ORANGE_BOTTOM, strict=True))
         draw.line([(0, y), (SIZE, y)], fill=(*color, 255))
     mask = Image.new("L", (SIZE, SIZE), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, SIZE - 1, SIZE - 1], radius=int(SIZE * 0.22), fill=255)

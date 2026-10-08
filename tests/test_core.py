@@ -10,7 +10,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scdl_gui import engine, settings as settings_mod, templates  # noqa: E402
+from scdl_gui import engine, templates  # noqa: E402
+from scdl_gui import settings as settings_mod
 from scdl_gui.parsing import JobCounts, OutputParser, friendly_error  # noqa: E402
 from scdl_gui.settings import FOLDER_ROOT, Job, Settings  # noqa: E402
 

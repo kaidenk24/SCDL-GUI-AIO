@@ -122,8 +122,9 @@ class MatchesPage(Page):
         self.candidates.setMinimumHeight(150)
         header = self.candidates.header()
         header.setStretchLastSection(False)
-        for col, mode in ((0, "ResizeToContents"), (1, "Stretch"), (2, "Stretch"), (3, "ResizeToContents"), (4, "ResizeToContents")):
-            header.setSectionResizeMode(col, getattr(QHeaderView.ResizeMode, mode))
+        fit, share = QHeaderView.ResizeMode.ResizeToContents, QHeaderView.ResizeMode.Stretch
+        for col, mode in enumerate((fit, share, share, fit, fit)):
+            header.setSectionResizeMode(col, mode)
         card.body.addWidget(label("Matches (best first - double-click to listen):", "CardTitle"))
         card.body.addWidget(self.candidates, 1)
 
@@ -206,7 +207,8 @@ class MatchesPage(Page):
         item.status = DOWNLOADING
         item.chosen_url = url
         item.message = ""
-        target = item.track.get("target") or str(Path(self._state.settings.library) / sanitize_filename(item.track.get("title") or "track"))
+        fallback = Path(self._state.settings.library) / sanitize_filename(item.track.get("title") or "track")
+        target = item.track.get("target") or str(fallback)
         job = {"key": item.key, "url": url, "target": target, "track": item.track, "archive": item.track.get("archive", "")}
         self.downloader.download(job, self._state.settings)
 
@@ -249,7 +251,9 @@ class MatchesPage(Page):
             return
         names = "\n".join(f"- {i.label}  ->  {i.candidates[0]['title']} ({i.candidates[0]['score']}%)" for i in strong[:15])
         more = f"\n...and {len(strong) - 15} more" if len(strong) > 15 else ""
-        answer = QMessageBox.question(self, "Accept strong matches", f"Download these {len(strong)} match(es)?\n\n{names}{more}")
+        answer = QMessageBox.question(
+            self, "Accept strong matches", f"Download these {len(strong)} match(es)?\n\n{names}{more}"
+        )
         if answer == QMessageBox.StandardButton.Yes:
             for item in strong:
                 self._start_download(item, item.candidates[0]["url"])
@@ -342,7 +346,9 @@ class MatchesPage(Page):
             if source_length and cand.get("duration"):
                 diff = cand["duration"] - source_length
                 length += f"  ({diff:+d}s)" if diff else "  (same)"
-            row = QTreeWidgetItem([f"{cand['score']}%", cand["title"], cand.get("channel", ""), length, cand.get("source", "")])
+            row = QTreeWidgetItem(
+                [f"{cand['score']}%", cand["title"], cand.get("channel", ""), length, cand.get("source", "")]
+            )
             row.setForeground(0, QColor(_score_color(cand["score"])))
             row.setData(0, Qt.ItemDataRole.UserRole, cand["url"])
             row.setToolTip(1, cand["url"])

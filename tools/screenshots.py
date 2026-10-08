@@ -29,10 +29,10 @@ from scdl_gui.matches import REVIEW, MatchItem, save_matches  # noqa: E402
 setup_page.find_ffmpeg = lambda _settings: "C:\\Program Files\\FFmpeg\\bin\\ffmpeg.exe"
 setup_page.find_js_runtime = lambda: "C:\\Program Files\\nodejs\\node.exe"
 from scdl_gui.settings import Job, Settings, save_queue  # noqa: E402
-from scdl_gui.watches import Watch, save_watches  # noqa: E402
 from scdl_gui.ui.main_window import NAV, MainWindow  # noqa: E402
 from scdl_gui.ui.state import AppState  # noqa: E402
 from scdl_gui.ui.theme import apply_theme  # noqa: E402
+from scdl_gui.watches import Watch, save_watches  # noqa: E402
 
 DEMO_QUEUE = [
     Job("https://soundcloud.com/djexample/sets/summer-house", None, True, "Summer House", "Playlist", "Done - 42 new, 1 to match on YouTube"),

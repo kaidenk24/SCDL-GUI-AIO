@@ -60,7 +60,7 @@ class WatchModel(QAbstractTableModel):
             return
         old, old_live = self._watches, self._live
         self._watches, self._live = fresh, live
-        for row, (before, after) in enumerate(zip(old, fresh)):
+        for row, (before, after) in enumerate(zip(old, fresh, strict=True)):
             if before.folder != after.folder:
                 self.dataChanged.emit(self.index(row, 0), self.index(row, len(HEADERS) - 1))
             elif before != after or old_live[row] != live[row]:
@@ -206,7 +206,8 @@ class PlaylistsPage(Page):
         self.table.setMinimumHeight(150)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked | QAbstractItemView.EditTrigger.DoubleClicked)
+        triggers = QAbstractItemView.EditTrigger
+        self.table.setEditTriggers(triggers.SelectedClicked | triggers.DoubleClicked)
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(34)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -349,7 +350,8 @@ class PlaylistsPage(Page):
     def _show_settings(self) -> None:
         settings = self._state.settings
         for widget, apply in (
-            (self.interval, lambda: self.interval.setCurrentIndex(max(self.interval.findData(settings.watch_interval_hours), 0))),
+            (self.interval, lambda: self.interval.setCurrentIndex(
+                max(self.interval.findData(settings.watch_interval_hours), 0))),
             (self.background, lambda: self.background.setChecked(settings.run_in_background)),
             (self.startup, lambda: self.startup.setChecked(settings.start_with_windows)),
         ):

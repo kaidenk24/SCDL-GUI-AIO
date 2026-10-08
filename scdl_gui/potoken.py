@@ -144,7 +144,8 @@ def install(version: str, node: str, log: Log) -> PotInstall:
 
     home = target.server_home
     # --include=dev: TypeScript is needed to compile, even if NODE_ENV=production is set system-wide.
-    _run([npm, "ci", "--include=dev", "--no-audit", "--no-fund"], home, log, "Installing its JavaScript packages (npm ci)...")
+    _run([npm, "ci", "--include=dev", "--no-audit", "--no-fund"], home, log,
+         "Installing its JavaScript packages (npm ci)...")
     _run([node, str(home / "node_modules" / "typescript" / "bin" / "tsc")], home, log, "Compiling the generator...")
     _run([npm, "prune", "--omit=dev", "--no-audit", "--no-fund"], home, log, "Removing build-only packages...")
     if not (home / SCRIPT).is_file():

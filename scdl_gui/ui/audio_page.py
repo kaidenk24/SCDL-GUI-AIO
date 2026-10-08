@@ -29,7 +29,9 @@ class AudioPage(Page):
         super().__init__("Audio", "How the MP3s sound and how big they are.")
         self._state = state
 
-        quality = Card("MP3 quality", "SoundCloud's best stream (256k AAC with Go+, or the original upload) is converted to:")
+        quality = Card(
+            "MP3 quality", "SoundCloud's best stream (256k AAC with Go+, or the original upload) is converted to:"
+        )
         self.quality = OptionList(QUALITY_OPTIONS)
         self.quality.changed.connect(lambda q: state.update(quality=q))
         quality.body.addWidget(self.quality)
@@ -41,7 +43,9 @@ class AudioPage(Page):
         self.originals.setToolTip("Often a WAV or 320k file - the best possible source. Uses one extra request per track.")
         self.originals.toggled.connect(lambda on: state.update(use_originals=on))
         self.previews = QCheckBox("Skip 30-second Go+ previews (recommended)")
-        self.previews.setToolTip("Without a Go+ login some tracks only offer a 30s clip. Skipping marks them failed instead.")
+        self.previews.setToolTip(
+            "Without a Go+ login some tracks only offer a 30s clip. Skipping marks them failed instead."
+        )
         self.previews.toggled.connect(lambda on: state.update(skip_previews=on))
         source.body.addWidget(self.originals)
         source.body.addWidget(self.previews)
@@ -87,7 +91,7 @@ class AudioPage(Page):
             button.clicked.connect(lambda _=False, v=value: self._state.update(target_lufs=v))
             self.preset_group.addButton(button)
             buttons.append(button)
-        self.preset_buttons = dict(zip([p[0] for p in LOUDNESS_PRESETS], buttons))
+        self.preset_buttons = dict(zip([p[0] for p in LOUDNESS_PRESETS], buttons, strict=True))
         card.body.addLayout(hbox(*buttons, None))
         self.loudness_hint = label("", "Hint", wrap=True)
         card.body.addWidget(self.loudness_hint)
@@ -96,7 +100,8 @@ class AudioPage(Page):
     def _load(self) -> None:
         s = self._state.settings
         self.quality.set_value(s.quality)
-        for widget, value in ((self.normalize, s.normalize), (self.originals, s.use_originals), (self.previews, s.skip_previews)):
+        checks = ((self.normalize, s.normalize), (self.originals, s.use_originals), (self.previews, s.skip_previews))
+        for widget, value in checks:
             widget.blockSignals(True)
             widget.setChecked(value)
             widget.blockSignals(False)

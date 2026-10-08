@@ -29,7 +29,9 @@ class AccountPage(Page):
     check_login_requested = Signal()
 
     def __init__(self, state: AppState) -> None:
-        super().__init__("Account & tags", "Your logins, finding DRM-protected tracks on YouTube, and what gets written into each MP3.")
+        super().__init__(
+            "Account & tags", "Your logins, finding DRM-protected tracks on YouTube, and what gets written into each MP3.",
+        )
         self._state = state
         self.body.addWidget(self._build_login())
         self.body.addWidget(self._build_youtube())
@@ -91,7 +93,9 @@ class AccountPage(Page):
         card.body.addLayout(hbox(label("PO token:"), self.po_token, guide))
         self.po_hint = label("", "Hint", wrap=True)
         card.body.addWidget(self.po_hint)
-        card.body.addWidget(label("YouTube needs Node.js, and Premium audio needs PO tokens - both on Setup & updates.", "Hint"))
+        card.body.addWidget(
+            label("YouTube needs Node.js, and Premium audio needs PO tokens - both on Setup & updates.", "Hint")
+        )
         return card
 
     def _build_tags(self) -> Card:
@@ -118,7 +122,8 @@ class AccountPage(Page):
         self.pill.set_state(STATE_STYLES.get(state, "error"), text)
         hints = {
             "yes": "Downloads use your account. Logged out or switched accounts? Press Check again.",
-            "no": f"Open soundcloud.com in {browser}, sign in, then press Check again. Without a login, Go+ tracks are skipped.",
+            "no": f"Open soundcloud.com in {browser}, sign in, then press Check again. "
+                  "Without a login, Go+ tracks are skipped.",
             "off": "Downloads run without an account; Go+ tracks are skipped.",
             "error": (f"Is {browser} installed? Chrome, Edge and other Chromium browsers encrypt their cookies - "
                       f"close the browser and try again, or use Firefox. {detail}").strip(),

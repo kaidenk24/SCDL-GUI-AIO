@@ -125,7 +125,9 @@ class QueuePage(Page):
         remove.clicked.connect(self._remove_selected)
         clear_done = QPushButton("Clear finished")
         clear_done.setToolTip("Remove links that downloaded without problems")
-        clear_done.clicked.connect(lambda: self._model.remove_where(lambda j: j.status.startswith("Done") and "failed" not in j.status))
+        clear_done.clicked.connect(
+            lambda: self._model.remove_where(lambda j: j.status.startswith("Done") and "failed" not in j.status)
+        )
         clear_all = QPushButton("Clear all")
         clear_all.clicked.connect(lambda: self._model.remove_where(lambda _j: True))
         lookup = QPushButton("Look up names")
@@ -209,8 +211,9 @@ class QueuePage(Page):
                                 lambda: self.follow_requested.emit([self._model.job(r) for r in rows]))
         follow.setEnabled(any(self._model.job(r).kind != "Track" for r in rows))
         menu.addAction("Look up name", lambda: self.lookup_requested.emit([self._model.job(r).url for r in rows]))
-        menu.addAction("Open on SoundCloud", lambda: [QDesktopServices.openUrl(QUrl(self._model.job(r).url)) for r in rows[:5]])
-        menu.addAction("Copy link", lambda: QGuiApplication.clipboard().setText("\n".join(self._model.job(r).url for r in rows)))
+        urls = [self._model.job(r).url for r in rows]
+        menu.addAction("Open on SoundCloud", lambda: [QDesktopServices.openUrl(QUrl(u)) for u in urls[:5]])
+        menu.addAction("Copy link", lambda: QGuiApplication.clipboard().setText("\n".join(urls)))
         menu.addSeparator()
         menu.addAction("Remove", lambda: self._model.remove(rows))
         menu.exec(self.table.viewport().mapToGlobal(pos))

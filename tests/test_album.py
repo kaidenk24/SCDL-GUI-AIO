@@ -12,7 +12,8 @@ from mutagen.id3 import ID3, TALB, TIT2, TPE2, TRCK
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scdl_gui import engine, retag, settings as settings_mod  # noqa: E402
+from scdl_gui import engine, retag  # noqa: E402
+from scdl_gui import settings as settings_mod
 from scdl_gui.settings import Job, Settings  # noqa: E402
 
 
