@@ -14,6 +14,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 import yt_dlp.globals
 from mutagen.id3 import APIC, COMM, ID3, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TRCK, WOAF, ID3NoHeaderError
@@ -68,14 +69,24 @@ def youtube_opts(**extra) -> dict:
 # ---------------------------------------------------------------- search
 
 
-def _music_search(ydl: YoutubeDL, query: str) -> list[dict]:
+def search_opts(**extra) -> dict:
+    """Searching needs no login, PO token or JavaScript runtime - those only matter for downloading the
+    audio (youtube_opts). Leaving them out saves reading the browser's cookies and solving YouTube's
+    challenges for every result."""
+    return {"quiet": True, "no_warnings": True, "noplaylist": True, **extra}
+
+
+def _music_search(query: str) -> list[dict]:
     url = f"https://music.youtube.com/search?q={urllib.parse.quote_plus(query)}#songs"
-    info = ydl.extract_info(url, download=False) or {}
+    # playlistend: the search is a "playlist" of hundreds of songs; without it all of them are fetched.
+    with YoutubeDL(search_opts(extract_flat="in_playlist", playlistend=MUSIC_RESULTS)) as ydl:
+        info = ydl.extract_info(url, download=False) or {}
     return [e for e in (info.get("entries") or []) if e.get("id")][:MUSIC_RESULTS]
 
 
-def _web_search(ydl: YoutubeDL, query: str) -> list[Candidate]:
-    info = ydl.extract_info(f"ytsearch{WEB_RESULTS}:{query}", download=False) or {}
+def _web_search(query: str) -> list[Candidate]:
+    with YoutubeDL(search_opts(extract_flat="in_playlist")) as ydl:
+        info = ydl.extract_info(f"ytsearch{WEB_RESULTS}:{query}", download=False) or {}
     return [
         Candidate(
             id=e["id"], url=f"https://www.youtube.com/watch?v={e['id']}", title=e.get("title") or "",
@@ -86,13 +97,15 @@ def _web_search(ydl: YoutubeDL, query: str) -> list[Candidate]:
     ]
 
 
-def _music_details(ydl: YoutubeDL, entry: dict) -> Candidate:
+def _music_details(entry: dict) -> Candidate:
     """YouTube Music search results carry no artist/length; look each one up."""
     try:
-        info = ydl.extract_info(f"https://music.youtube.com/watch?v={entry['id']}", download=False, process=False) or {}
+        with YoutubeDL(search_opts()) as ydl:
+            url = f"https://music.youtube.com/watch?v={entry['id']}"
+            info = ydl.extract_info(url, download=False, process=False) or {}
     except Exception:  # a result we can't open is still worth showing by title
         info = {}
-    artists = info.get("artists") or ([info["artist"]] if info.get("artist") else [])
+    artists = list(dict.fromkeys(info.get("artists") or ([info["artist"]] if info.get("artist") else [])))
     return Candidate(
         id=entry["id"], url=f"https://music.youtube.com/watch?v={entry['id']}",
         title=info.get("track") or info.get("title") or entry.get("title") or "",
@@ -102,24 +115,26 @@ def _music_details(ydl: YoutubeDL, entry: dict) -> Candidate:
 
 
 def find_matches(track: dict, query: str = "") -> tuple[str, list[Candidate], list[str]]:
+    """Both searches run at once, then the YouTube Music lookups run at once (each request is mostly
+    waiting on the network)."""
     query = query.strip() or build_query(track)
-    found: list[Candidate] = []
     errors: list[str] = []
-    music_entries: list[dict] = []
-    with YoutubeDL(youtube_opts(extract_flat="in_playlist")) as flat:
-        # (Searching YouTube Music by ISRC returns unrelated songs, so artist + title it is.)
+    # (Searching YouTube Music by ISRC returns unrelated songs, so artist + title it is.)
+    with ThreadPoolExecutor(max_workers=MUSIC_RESULTS + 1) as pool:
+        music = pool.submit(_music_search, query)
+        web = pool.submit(_web_search, query)
         try:
-            music_entries += _music_search(flat, query)
+            entries = list({e["id"]: e for e in music.result()}.values())
         except Exception as e:
             errors.append(f"YouTube Music search: {e}")
+            entries = []
+        details = [pool.submit(_music_details, entry) for entry in entries]
         try:
-            found += _web_search(flat, query)
+            found = web.result()
         except Exception as e:
             errors.append(f"YouTube search: {e}")
-    seen: set[str] = set()
-    unique = [e for e in music_entries if not (e["id"] in seen or seen.add(e["id"]))]
-    with YoutubeDL(youtube_opts()) as full:
-        found += [_music_details(full, entry) for entry in unique]
+            found = []
+        found += [d.result() for d in details]
     return query, rank(track, found)[:MAX_CANDIDATES], errors
 
 

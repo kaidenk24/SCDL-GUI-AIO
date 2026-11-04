@@ -70,8 +70,10 @@ class MatchesPage(Page):
         self._skipped: set[str] = load_skipped()
         self._detail_state: tuple | None = None  # what the detail card shows, to skip needless redraws
         self._candidates_key = ""
-        self.searcher = MatchSearchRunner(self)
-        self.searcher.found.connect(self._on_found)
+        self.searcher = MatchSearchRunner(self)  # tracks as they turn up, a batch at a time
+        self.quick_searcher = MatchSearchRunner(self)  # what you asked for: never waits behind a batch
+        for runner in (self.searcher, self.quick_searcher):
+            runner.found.connect(self._on_found)
         self.downloader = MatchDownloadRunner(self)
         self.downloader.done.connect(self._on_done)
 
@@ -91,7 +93,7 @@ class MatchesPage(Page):
         self.list.setMinimumSize(210, 120)
         self.list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list.currentRowChanged.connect(lambda _row: self._show_selected())
+        self.list.currentRowChanged.connect(lambda _row: (self._show_selected(), self._search_selected_first()))
         splitter = ResponsiveSplitter(self.list, self._build_detail(), stack_below=820,
                                       wide_sizes=(300, 700), stacked_sizes=(150, 500))
         splitter.setStretchFactor(1, 1)
@@ -188,15 +190,24 @@ class MatchesPage(Page):
         if waiting:
             self._search(waiting)
 
-    def _search(self, items: list[MatchItem]) -> None:
+    def _search(self, items: list[MatchItem], now: bool = False) -> None:
         for item in items:
             item.status = SEARCHING
-        self.searcher.search([{"key": i.key, "track": i.track, "query": i.query} for i in items], self._state.settings)
+        runner = self.quick_searcher if now else self.searcher
+        runner.search([{"key": i.key, "track": i.track, "query": i.query} for i in items], self._state.settings)
+
+    def _search_selected_first(self) -> None:
+        """A track you're looking at that's still queued for searching jumps the queue."""
+        item = self._current()
+        if item is not None and item.status == SEARCHING:
+            waiting = self.searcher.take(item.key)
+            if waiting is not None:
+                self.quick_searcher.search([waiting], self._state.settings)
 
     def _on_found(self, data: dict) -> None:
         item = self._find(data.get("key"))
-        if item is None:
-            return
+        if item is None or (item.query and data.get("query") != item.query):
+            return  # gone, or an older search than the one you started since (Search again)
         item.candidates = data.get("candidates") or []
         item.query = data.get("query") or item.query
         item.status = REVIEW if item.candidates else NO_MATCH
@@ -241,7 +252,7 @@ class MatchesPage(Page):
         if item is not None:
             item.query = self.query.text().strip()
             item.candidates = []
-            self._search([item])
+            self._search([item], now=True)
             self._changed()
 
     def _accept_strong(self) -> None:

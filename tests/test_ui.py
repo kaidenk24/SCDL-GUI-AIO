@@ -89,6 +89,37 @@ class MatchesListTests(UiTest):
         reopened.add_track(dict(track))  # downloading the playlist yourself asks again
         self.assertEqual(len(reopened._items), 1)
 
+    def test_search_again_and_the_selected_track_never_wait_behind_a_batch(self):
+        page = self.make_page(4)
+        background, quick = [], []
+        page.searcher.search = lambda items, settings: background.extend(items)
+        page.quick_searcher.search = lambda items, settings: quick.extend(items)
+        page.list.setCurrentRow(1)
+        page.query.setText("my own words")
+        page._search_again()
+        self.assertEqual([i["query"] for i in quick], ["my own words"])
+        self.assertEqual(background, [])
+
+        # A track still queued for the background batch moves to the front when you select it.
+        queued = page._items[3]
+        queued.status = SEARCHING
+        page.searcher._waiting = [{"key": queued.key, "track": queued.track, "query": ""}]
+        page.list.setCurrentRow(3)
+        self.assertEqual(page.searcher._waiting, [])
+        self.assertEqual(quick[-1]["key"], queued.key)
+
+    def test_an_older_search_does_not_overwrite_a_newer_one(self):
+        page = self.make_page(1)
+        page.quick_searcher.search = lambda items, settings: None
+        page.list.setCurrentRow(0)
+        page.query.setText("better words")
+        page._search_again()
+        item = page._items[0]
+        page._on_found({"key": item.key, "query": "Track 0", "candidates": [candidate(9)]})  # the earlier search
+        self.assertEqual(item.status, SEARCHING)
+        page._on_found({"key": item.key, "query": "better words", "candidates": [candidate(1)]})
+        self.assertEqual([c["url"] for c in item.candidates], [candidate(1)["url"]])
+
     def test_added_and_removed_tracks(self):
         page = self.make_page(3)
         page.list.setCurrentRow(2)

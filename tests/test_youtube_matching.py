@@ -93,5 +93,69 @@ class PlumbingTests(unittest.TestCase):
             self.assertEqual(loaded[0].key, "1|a")
 
 
+class SearchTests(unittest.TestCase):
+    """The search itself, with YouTube replaced by canned answers."""
+
+    @classmethod
+    def setUpClass(cls):
+        from scdl_gui import youtube
+
+        cls.youtube = youtube
+
+    def test_search_skips_login_and_po_tokens(self):
+        # Reading the browser's cookies and making PO tokens took seconds per result and only matters
+        # for downloading the audio.
+        with mock.patch.object(self.youtube, "YT_LOGIN", True), mock.patch.object(self.youtube, "PO_TOKEN", "tok"):
+            opts = self.youtube.search_opts()
+            self.assertIn("cookiesfrombrowser", self.youtube.youtube_opts())
+        self.assertFalse({"cookiesfrombrowser", "extractor_args", "js_runtimes"} & opts.keys())
+
+    def test_music_search_stops_after_the_results_it_uses(self):
+        # Without a limit yt-dlp fetched all ~350 results of a YouTube Music search (12 s) to keep 3.
+        used = {}
+
+        class FakeYDL:
+            def __init__(self, params):
+                used.update(params)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"entries": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}
+
+        with mock.patch.object(self.youtube, "YoutubeDL", FakeYDL):
+            self.assertEqual(len(self.youtube._music_search("x")), self.youtube.MUSIC_RESULTS)
+        self.assertEqual(used["playlistend"], self.youtube.MUSIC_RESULTS)
+
+    def test_one_search_failing_still_gives_the_other_results(self):
+        web = [RESULTS[0]]
+        music_entry = {"id": "m1", "title": "Neon Skyline!"}
+        detail = Candidate("m1", "https://music.youtube.com/watch?v=m1", "Neon Skyline!", "Aurora Vale", 151,
+                           "YouTube Music")
+        looked_up = []
+
+        def details(entry):
+            looked_up.append(entry["id"])
+            return detail
+
+        with mock.patch.object(self.youtube, "_web_search", side_effect=RuntimeError("offline")), \
+                mock.patch.object(self.youtube, "_music_search", return_value=[music_entry, dict(music_entry)]), \
+                mock.patch.object(self.youtube, "_music_details", side_effect=details):
+            query, found, errors = self.youtube.find_matches(TRACK)
+        self.assertEqual([c.id for c in found], ["m1"])
+        self.assertEqual(looked_up, ["m1"])  # the same song twice is looked up once
+        self.assertEqual(errors, ["YouTube search: offline"])
+        self.assertEqual(query, build_query(TRACK))
+
+        with mock.patch.object(self.youtube, "_web_search", return_value=web), \
+                mock.patch.object(self.youtube, "_music_search", side_effect=RuntimeError("blocked")):
+            _query, found, errors = self.youtube.find_matches(TRACK, "my words")
+        self.assertEqual(([c.id for c in found], errors), (["CtgqavhpzvE"], ["YouTube Music search: blocked"]))
+
+
 if __name__ == "__main__":
     unittest.main()

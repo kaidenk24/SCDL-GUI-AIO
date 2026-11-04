@@ -314,6 +314,13 @@ class MatchSearchRunner(QObject):
         if self._process is None:
             self._start()
 
+    def take(self, key: str) -> dict | None:
+        """Remove a search that hasn't started yet (to run it somewhere sooner)."""
+        item = next((i for i in self._waiting if i["key"] == key), None)
+        if item is not None:
+            self._waiting.remove(item)
+        return item
+
     def _start(self) -> None:
         self._cleanup()
         if not self._waiting:
