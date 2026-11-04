@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- YouTube matches are found about 8x faster (a batch of 3 tracks: 95 s -> 11 s; the first result in
+  5 s instead of 29 s). The YouTube Music search fetched ~350 results to use 3; searching no longer
+  reads your browser login or makes PO tokens (only downloads need them); both searches and the
+  per-result lookups now run at the same time.
+- *Search again*, and a track you select that's still waiting to be searched, no longer wait behind
+  the other tracks being searched. An older search's results can't replace a newer one's.
+
 ## 1.1.0
 
 - New **Playlists** page: follow playlists, likes or profiles, each with its own folder. The app checks them
