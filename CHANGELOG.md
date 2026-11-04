@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.1
 
 - YouTube matches are found about 8x faster (a batch of 3 tracks: 95 s -> 11 s; the first result in
   5 s instead of 29 s). The YouTube Music search fetched ~350 results to use 3; searching no longer
