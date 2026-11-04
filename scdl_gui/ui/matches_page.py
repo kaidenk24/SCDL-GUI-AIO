@@ -272,9 +272,8 @@ class MatchesPage(Page):
     def _refresh_list(self) -> None:
         """Update the list in place: rows keep their position, and the selection and scroll position stay
         where they are when another track's status changes (rebuilding the list made it jump)."""
-        current = self._current()
         self.list.blockSignals(True)
-        wanted = [item.key for item in self._items]
+        wanted = {item.key for item in self._items}
         for row in reversed(range(self.list.count())):
             if self.list.item(row).data(Qt.ItemDataRole.UserRole) not in wanted:
                 self.list.takeItem(row)
@@ -300,7 +299,7 @@ class MatchesPage(Page):
             f"{counts[DOWNLOADING]} downloading  -  {counts[SAVED]} saved" if self._items else ""
         )
         shown = self._current()
-        if shown is None or current is None or shown.key != current.key or self._detail_state != self._state_of(shown):
+        if shown is None or self._detail_state != self._state_of(shown):
             self._show_selected()
 
     @staticmethod

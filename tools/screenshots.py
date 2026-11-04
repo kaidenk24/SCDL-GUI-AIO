@@ -43,14 +43,15 @@ DEMO_QUEUE = [
 ]
 _NOW = time.time()
 DEMO_WATCHES = [
-    Watch("https://soundcloud.com/djexample/sets/summer-house", None, "Summer House", "Playlist", True,
-          _NOW - 40 * 60, "2 new tracks", _NOW - 40 * 60, 14),
-    Watch("https://soundcloud.com/djexample/sets/gym-mix", "Gym\\{playlist}", "Gym Mix", "Playlist", True,
-          _NOW - 40 * 60, "Up to date", 0.0, 3),
-    Watch("https://soundcloud.com/djexample/likes", "Likes", "djexample (Likes)", "Likes", True,
-          _NOW - 2 * 3600, "1 new track, 1 to match on YouTube", _NOW - 2 * 3600, 37),
-    Watch("https://soundcloud.com/djexample/sets/wedding-party", "Wedding", "Wedding Party", "Playlist", False,
-          _NOW - 3 * 86400, "Up to date", 0.0, 0),
+    Watch("https://soundcloud.com/djexample/sets/summer-house", folder=None, name="Summer House", kind="Playlist",
+          last_checked=_NOW - 40 * 60, last_result="2 new tracks", last_new=_NOW - 40 * 60, total_new=14),
+    Watch("https://soundcloud.com/djexample/sets/gym-mix", folder="Gym\\{playlist}", name="Gym Mix", kind="Playlist",
+          last_checked=_NOW - 40 * 60, last_result="Up to date", total_new=3),
+    Watch("https://soundcloud.com/djexample/likes", folder="Likes", name="djexample (Likes)", kind="Likes",
+          last_checked=_NOW - 2 * 3600, last_result="1 new track, 1 to match on YouTube", last_new=_NOW - 2 * 3600,
+          total_new=37),
+    Watch("https://soundcloud.com/djexample/sets/wedding-party", folder="Wedding", name="Wedding Party",
+          kind="Playlist", enabled=False, last_checked=_NOW - 3 * 86400, last_result="Up to date"),
 ]
 DEMO_MATCH = MatchItem(
     track={

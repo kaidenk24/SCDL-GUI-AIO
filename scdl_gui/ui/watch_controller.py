@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -17,33 +16,35 @@ from scdl_gui.watches import Watch, add_watches, is_due, load_watches, record_ch
 
 TICK_MS = 60_000  # how often the schedule is looked at
 FIRST_TICK_MS = 20_000  # after start-up, let the login check and update check go first
+AFTER_YOUR_RUN_MS = 3_000  # a check that was waiting for your downloads starts this soon after
 WAITING = "Waiting..."
 CHECKING = "Checking..."
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class WatchController(QObject):
-    """Owns the followed playlists. Checks never overlap a download you started yourself: is_blocked()
-    is asked before each run, and pause() stops a running check (it runs again afterwards)."""
+    """Owns the followed playlists. Checks never overlap a download you started yourself (`your_runner`):
+    a running check steps aside when you start one, and checks wait until yours is done."""
 
     changed = Signal()  # the list, or a playlist's state, changed
+    live_changed = Signal(str)  # url whose running-check status changed (see live_status)
     status = Signal(str)  # what's happening, for the bottom bar
-    running_changed = Signal(bool)
     new_tracks = Signal(str, int)  # playlist name, tracks downloaded by a check
     names_needed = Signal(list)  # newly followed links without a name yet
     log = Signal(str, str)  # level, text (for the Activity page)
     drm_found = Signal(dict)
 
-    def __init__(self, state: AppState, is_blocked: Callable[[], bool], parent: QObject | None = None) -> None:
+    def __init__(self, state: AppState, your_runner: DownloadRunner, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._state = state
-        self._is_blocked = is_blocked
+        self._your_runner = your_runner
+        your_runner.started.connect(self.pause)  # a running check steps aside; it runs again afterwards
+        your_runner.finished.connect(lambda *_: QTimer.singleShot(AFTER_YOUR_RUN_MS, self.tick))
         self._watches: list[Watch] = load_watches()
         self._live: dict[str, str] = {}  # url -> what a running check is doing right now
         self._forced: set[str] = set()  # "Check now" requests that haven't run yet
         self._run_urls: list[str] = []  # links of the current run, by runner row
         self._run_done: set[str] = set()  # links of the current run that finished
-        self._run_new = 0
         self._problem = ""
 
         self.runner = DownloadRunner(self)
@@ -100,13 +101,18 @@ class WatchController(QObject):
         self._stop_if_running(gone)
 
     def update_watch(self, url: str, **changes) -> None:
-        self._watches = [w.with_changes(**changes) if w.url == url else w for w in self._watches]
+        self.update_watches([url], **changes)
+
+    def update_watches(self, urls: list[str], **changes) -> None:
+        """Change several followed links at once (one save)."""
+        targets = set(urls)
+        self._watches = [w.with_changes(**changes) if w.url in targets else w for w in self._watches]
         self._save()
         if changes.get("enabled"):
             QTimer.singleShot(0, self.tick)
         elif changes.get("enabled") is False:
-            self._forced.discard(url)
-            self._stop_if_running({url})
+            self._forced -= targets
+            self._stop_if_running(targets)
 
     def _stop_if_running(self, urls: set[str]) -> None:
         """Unfollowed or paused while being checked: stop now (the others are checked again next time)."""
@@ -142,7 +148,7 @@ class WatchController(QObject):
             self.runner.stop()
 
     def tick(self) -> None:
-        if self.runner.is_running() or self._is_blocked():
+        if self.runner.is_running() or self._your_runner.is_running():
             return
         now = time.time()
         interval = self._state.settings.watch_interval_hours
@@ -156,13 +162,11 @@ class WatchController(QObject):
             return
         self._run_urls = [w.url for w in due]
         self._run_done = set()
-        self._run_new = 0
         for watch in due:
             self._live[watch.url] = WAITING
         self.log.emit("info", f"Checking {len(due)} followed playlist(s) for new tracks")
-        self.running_changed.emit(True)
-        self.changed.emit()
         self.runner.start([(row, w.as_job()) for row, w in enumerate(due)], self._state.settings)
+        self.changed.emit()  # after starting, so the page shows "checking now"
 
     def _cant_run(self) -> str:
         settings = self._state.settings
@@ -185,16 +189,19 @@ class WatchController(QObject):
 
     def _on_job_started(self, row: int) -> None:
         url = self._url(row)
-        self._live[url] = CHECKING
         watch = self._find(url)
         name = (watch.name or url) if watch else url
         self.status.emit(f"Checking followed playlist {row + 1} of {len(self._run_urls)}: {name}")
-        self.changed.emit()
+        self._set_live(url, CHECKING)
 
     def _on_job_progress(self, row: int, item: int, total: int, _track: str) -> None:
         if total:
-            self._live[self._url(row)] = f"Checking {item} of {total}..."
-            self.changed.emit()
+            self._set_live(self._url(row), f"Checking {item} of {total}...")
+
+    def _set_live(self, url: str, text: str) -> None:
+        if self._live.get(url) != text:  # progress repeats itself for every track: only real changes
+            self._live[url] = text
+            self.live_changed.emit(url)
 
     def _on_job_finished(self, row: int, status: str, counts: JobCounts) -> None:
         url = self._url(row)
@@ -206,24 +213,24 @@ class WatchController(QObject):
         self._forced.discard(url)
         watch = self._find(url)
         if watch is not None:
-            self.update_watch(url, **_changes(watch, record_check(watch, time.time(), status, counts)))
+            now = time.time()
+            self._watches = [record_check(w, now, status, counts) if w.url == url else w for w in self._watches]
+            self._save()
             if counts.saved:
-                self._run_new += counts.saved
                 self.new_tracks.emit(watch.name or url, counts.saved)
 
-    def _on_run_finished(self, _totals: JobCounts, stopped: bool) -> None:
+    def _on_run_finished(self, totals: JobCounts, stopped: bool) -> None:
         for url in self._run_urls:
             self._live.pop(url, None)
         for url in self._forced:  # requested during the run: still waiting for their turn
             self._live[url] = WAITING
         self._run_urls = []
-        self.running_changed.emit(False)
         self.changed.emit()
         if stopped:
             self.status.emit("")
             return
         self.status.emit(
-            f"Followed playlists checked: {self._run_new} new track(s)." if self._run_new
+            f"Followed playlists checked: {totals.saved} new track(s)." if totals.saved
             else "Followed playlists checked: no new tracks."
         )
         QTimer.singleShot(0, self.tick)
@@ -236,11 +243,5 @@ class WatchController(QObject):
         try:
             save_watches(self._watches)
         except OSError as err:  # e.g. the file is briefly locked: keep going, the next change saves again
-            log.warning("Couldn't save followed playlists: %s", err)
+            logger.warning("Couldn't save followed playlists: %s", err)
         self.changed.emit()
-
-
-def _changes(old: Watch, new: Watch) -> dict:
-    """Only what a check changed, so edits made meanwhile (folder, on/off) are kept."""
-    return {name: getattr(new, name) for name in ("last_checked", "retry_at", "last_result", "last_new", "total_new")
-            if getattr(new, name) != getattr(old, name)}

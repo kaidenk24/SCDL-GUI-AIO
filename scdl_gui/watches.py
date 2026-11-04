@@ -10,6 +10,7 @@ import logging
 import os
 from dataclasses import asdict, dataclass, replace
 
+from scdl_gui.engine import guess_kind
 from scdl_gui.parsing import JobCounts
 from scdl_gui.settings import FOLDER_AUTO, Job, _coerce, _read_json, _write_json, data_dir
 
@@ -38,25 +39,25 @@ class Watch:
         return Job(url=self.url, folder=self.folder, name=self.name, kind=self.kind)
 
 
-def interval_seconds(hours: int) -> float:
-    return max(int(hours), 1) * 3600.0
+def is_followable(url: str, kind: str = "") -> bool:
+    """Anything that can gain tracks; a single track never changes."""
+    return (kind or guess_kind(url)) != "Track"
+
+
+def describe_interval(hours: int) -> str:
+    """'hour', '3 hours', 'day' (as in 'every ...')."""
+    return "day" if hours == 24 else "hour" if hours == 1 else f"{hours} hours"
 
 
 def due_at(watch: Watch, now: float, interval_hours: int) -> float:
     """When this watch should next be checked."""
-    if watch.retry_at:
-        return watch.retry_at
-    if watch.last_checked > now + 60:  # the clock was turned back: don't wait for it to catch up
-        return now
-    return watch.last_checked + interval_seconds(interval_hours)
+    interval = max(int(interval_hours), 1) * 3600.0
+    due = watch.retry_at or watch.last_checked + interval
+    return now if due > now + interval else due  # the clock was turned back: don't wait for it to catch up
 
 
 def is_due(watch: Watch, now: float, interval_hours: int) -> bool:
     return watch.enabled and now >= due_at(watch, now, interval_hours)
-
-
-def due_watches(watches: list[Watch], now: float, interval_hours: int) -> list[Watch]:
-    return [w for w in watches if is_due(w, now, interval_hours)]
 
 
 def next_check_at(watches: list[Watch], interval_hours: int, now: float) -> float | None:
@@ -66,9 +67,9 @@ def next_check_at(watches: list[Watch], interval_hours: int, now: float) -> floa
 
 
 def add_watches(watches: list[Watch], urls: list[str], folder: str | None) -> tuple[list[Watch], list[str]]:
-    """(new list, links that were added); links already followed are left alone."""
+    """(new list, links that were added); links already followed, and single tracks, are left out."""
     known = {w.url for w in watches}
-    fresh = [u for u in dict.fromkeys(urls) if u not in known]
+    fresh = [u for u in dict.fromkeys(urls) if u not in known and is_followable(u)]
     return [*watches, *(Watch(url=u, folder=folder) for u in fresh)], fresh
 
 
@@ -106,32 +107,14 @@ def load_watches() -> list[Watch]:
             log.warning("Kept the unreadable %s as %s", path.name, path.with_suffix(".json.bad").name)
         except OSError as err:
             log.warning("Couldn't set aside %s: %s", path, err)
-    watches: list[Watch] = []
+    watches: dict[str, Watch] = {}
     for entry in raw if isinstance(raw, list) else []:
-        if isinstance(entry, dict) and isinstance(entry.get("url"), str):
-            watch = _coerce(Watch, entry)
-            if not any(w.url == watch.url for w in watches):
-                watches.append(_clean(watch))
-    return watches
-
-
-def _clean(watch: Watch) -> Watch:
-    """Values of the wrong type in a hand-edited file fall back to defaults."""
-    defaults = Watch(url=watch.url)
-    changes = {}
-    for name in ("name", "kind", "last_result"):
-        if not isinstance(getattr(watch, name), str):
-            changes[name] = getattr(defaults, name)
-    for name in ("last_checked", "last_new", "retry_at"):
-        if not isinstance(getattr(watch, name), (int, float)) or isinstance(getattr(watch, name), bool):
-            changes[name] = 0.0
-    if not isinstance(watch.total_new, int) or isinstance(watch.total_new, bool):
-        changes["total_new"] = 0
-    if not isinstance(watch.enabled, bool):
-        changes["enabled"] = True
-    if watch.folder is not None and not isinstance(watch.folder, str):
-        changes["folder"] = FOLDER_AUTO
-    return watch.with_changes(**changes) if changes else watch
+        if isinstance(entry, dict) and isinstance(entry.get("url"), str) and entry["url"] not in watches:
+            watch = _coerce(Watch, entry)  # values of the wrong type fall back to defaults
+            if watch.folder is not None and not isinstance(watch.folder, str):
+                watch = watch.with_changes(folder=FOLDER_AUTO)
+            watches[watch.url] = watch
+    return list(watches.values())
 
 
 def save_watches(watches: list[Watch]) -> None:

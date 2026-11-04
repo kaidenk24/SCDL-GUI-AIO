@@ -87,6 +87,7 @@ class DownloadRunner(QObject):
     log = Signal(str, str)  # level (info/ok/skip/error/warn/detail), text
     totals_changed = Signal(object)  # JobCounts
     status = Signal(str)
+    started = Signal()  # a run began
     finished = Signal(object, bool)  # JobCounts, stopped
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -111,6 +112,7 @@ class DownloadRunner(QObject):
         self._settings = settings
         self._totals = JobCounts()
         self._stopping = False
+        self.started.emit()
         self.totals_changed.emit(self._totals)
         self._run_next()
 

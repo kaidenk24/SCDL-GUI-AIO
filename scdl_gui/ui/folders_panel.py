@@ -39,6 +39,22 @@ def resolve_folder(library: str, folder: str | None) -> Path:
     return Path(fixed) if Path(fixed).drive else Path(library) / fixed
 
 
+def add_custom_folder(state: AppState, name: str) -> str:
+    """Add one of your own folders to the 'Save to' choices; returns its cleaned-up name ('' if none)."""
+    name = clean_folder_name(name)
+    if name and name not in state.settings.folders:
+        state.update(folders=(*state.settings.folders, name))
+    return name
+
+
+def open_folder(parent: QWidget, path: Path) -> None:
+    """Show a folder in File Explorer (or say it isn't there yet)."""
+    if path.is_dir():
+        os.startfile(path)  # noqa: S606 - opening a folder in Explorer
+    else:
+        QMessageBox.information(parent, "Open folder", f"{path}\n\ndoesn't exist yet. It's created by the first download.")
+
+
 def ask_new_folder(parent: QWidget) -> str:
     """Name of a new folder inside the library, or "" if cancelled."""
     name, ok = QInputDialog.getText(parent, "New folder", NEW_FOLDER_HINT)
@@ -157,10 +173,7 @@ class FoldersPanel(QWidget):
 
     # ---- actions
     def add_folder(self, name: str) -> None:
-        name = clean_folder_name(name)
-        if name and name not in self._state.settings.folders:
-            self._state.update(folders=(*self._state.settings.folders, name))
-        self._select(name)
+        self._select(add_custom_folder(self._state, name))
 
     def _select(self, folder: str | None) -> None:
         for i in range(self.list.count()):
@@ -214,8 +227,4 @@ class FoldersPanel(QWidget):
         self._state.update(folders=tuple(f for f in self._state.settings.folders if f != folder))
 
     def _open(self) -> None:
-        path = self.resolve(self.selected_folder())
-        if path.is_dir():
-            os.startfile(path)  # noqa: S606 - opening a folder in Explorer
-        else:
-            QMessageBox.information(self, "Open folder", f"{path}\n\ndoesn't exist yet. It's created by the first download.")
+        open_folder(self, self.resolve(self.selected_folder()))

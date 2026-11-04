@@ -92,8 +92,7 @@ def create_shortcuts(places: list[str]) -> list[Path]:
 
 
 def startup_link() -> Path:
-    appdata = Path(os.environ.get("APPDATA", ""))
-    return appdata / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / f"{APP_NAME}.lnk"
+    return shortcut_folders()["Start menu"] / "Startup" / f"{APP_NAME}.lnk"
 
 
 def set_start_with_windows(enabled: bool) -> bool:

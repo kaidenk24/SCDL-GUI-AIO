@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLayout,
+    QMenu,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -27,6 +29,12 @@ def label(text: str, object_name: str = "", wrap: bool = False) -> QLabel:
         widget.setObjectName(object_name)
     widget.setWordWrap(wrap)
     return widget
+
+
+def add_link_actions(menu: QMenu, urls: list[str]) -> None:
+    """'Open on SoundCloud' (the first few) and 'Copy link' for right-click menus."""
+    menu.addAction("Open on SoundCloud", lambda: [QDesktopServices.openUrl(QUrl(u)) for u in urls[:5]])
+    menu.addAction("Copy link", lambda: QGuiApplication.clipboard().setText("\n".join(urls)))
 
 
 def hbox(*items, spacing: int = 8, margins=(0, 0, 0, 0)) -> QHBoxLayout:
@@ -67,7 +75,7 @@ class Page(QWidget):
         self.body.addWidget(label(title, "PageTitle"))
         self.body.addWidget(label(subtitle, "PageSubtitle", wrap=True))
         self.body.addSpacing(4)
-        self._max_width: int | None = None
+        self._capped = False  # settings pages: no wider than FORM_MAX_WIDTH
         self._margins: tuple[int, ...] = ()
         self._apply_margins(self.width())
         area = QScrollArea()
@@ -80,8 +88,8 @@ class Page(QWidget):
         narrow = width < self.NARROW_BELOW
         side, top = self.NARROW_MARGINS if narrow else self.WIDE_MARGINS
         right = side
-        if self._max_width and width - 2 * side > self._max_width:
-            right = width - side - self._max_width
+        if self._capped and width - 2 * side > self.FORM_MAX_WIDTH:
+            right = width - side - self.FORM_MAX_WIDTH
         margins = (side, top, right, top)
         if margins != self._margins:
             self._margins = margins
@@ -94,7 +102,7 @@ class Page(QWidget):
 
     def finish(self) -> None:
         self.body.addStretch(1)
-        self._max_width = self.FORM_MAX_WIDTH
+        self._capped = True
         self._apply_margins(self.width())
 
 
@@ -159,6 +167,10 @@ class FlowLayout(QLayout):
         self._items: list = []
         self._spacing = spacing
         self.setContentsMargins(0, 0, 0, 0)
+        if parent is not None:  # its height depends on its width
+            policy = parent.sizePolicy()
+            policy.setHeightForWidth(True)
+            parent.setSizePolicy(policy)
 
     def addItem(self, item) -> None:
         self._items.append(item)
@@ -222,9 +234,6 @@ class FlowRow(QWidget):
         layout = FlowLayout(self, spacing)
         for widget in widgets:
             layout.addWidget(widget)
-        policy = self.sizePolicy()
-        policy.setHeightForWidth(True)
-        self.setSizePolicy(policy)
 
 
 class ResponsiveSplitter(QSplitter):
@@ -252,21 +261,16 @@ class ResponsiveSplitter(QSplitter):
 class ElidedLabel(QLabel):
     """A one-line label that shortens its text with '...' to fit, instead of being cut off."""
 
-    def __init__(self, text: str = "", object_name: str = "", mode=Qt.TextElideMode.ElideMiddle) -> None:
+    def __init__(self, object_name: str = "") -> None:
         super().__init__()
         if object_name:
             self.setObjectName(object_name)
-        self._full = text
-        self._mode = mode
-        self._elide()
+        self._full = ""
 
     def setText(self, text: str) -> None:  # noqa: N802 - Qt naming
         self._full = text
         self.setToolTip(text)
         self._elide()
-
-    def full_text(self) -> str:
-        return self._full
 
     def sizeHint(self):
         hint = super().sizeHint()
@@ -283,7 +287,7 @@ class ElidedLabel(QLabel):
         self._elide()
 
     def _elide(self) -> None:
-        super().setText(self.fontMetrics().elidedText(self._full, self._mode, max(self.width() - 2, 10)))
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideMiddle, max(self.width() - 2, 10)))
 
 
 class TokenBar(QWidget):
@@ -294,9 +298,6 @@ class TokenBar(QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = FlowLayout(self, spacing=6)
-        policy = self.sizePolicy()
-        policy.setHeightForWidth(True)
-        self.setSizePolicy(policy)
         for token in TOKENS:
             chip = QPushButton(token.label)
             chip.setObjectName("Chip")

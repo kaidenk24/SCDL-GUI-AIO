@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 from pathlib import Path
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from scdl_gui import APP_NAME, APP_VERSION
-from scdl_gui.engine import find_ffmpeg, guess_kind
+from scdl_gui.engine import find_ffmpeg
 from scdl_gui.parsing import JobCounts
 from scdl_gui.runner import DownloadRunner, LoginChecker, LookupRunner
 from scdl_gui.settings import data_dir, load_queue, resource_path, save_queue, save_settings
@@ -45,6 +46,7 @@ from scdl_gui.ui.updater import UpdateBanner, UpdateController
 from scdl_gui.ui.watch_controller import WatchController
 from scdl_gui.ui.widgets import ElidedLabel, StatusPill, hbox, label
 from scdl_gui.updates import take_update_error
+from scdl_gui.watches import describe_interval, is_followable
 
 NAV = (  # (title, Segoe Fluent/MDL2 icon code point)
     ("Queue", "\ue896"),
@@ -67,9 +69,15 @@ SIDEBAR_WIDTH, SIDEBAR_COMPACT_WIDTH = 220, 64
 COMPACT_BELOW = 1100  # window width under which the sidebar shows icons only
 
 
-def glyph_icon(glyph: str, color: str, size: int = 18, badge: bool = False) -> QIcon:
+@functools.cache
+def _icon_font() -> str | None:
     families = QFontDatabase.families()
-    family = next((f for f in ("Segoe Fluent Icons", "Segoe MDL2 Assets") if f in families), None)
+    return next((f for f in ("Segoe Fluent Icons", "Segoe MDL2 Assets") if f in families), None)
+
+
+@functools.cache
+def glyph_icon(glyph: str, color: str, size: int = 18, badge: bool = False) -> QIcon:
+    family = _icon_font()
     if family is None:
         return QIcon()
     pixmap = QPixmap(QSize(size, size) * 2)
@@ -107,7 +115,7 @@ class MainWindow(QMainWindow):
         self.runner = DownloadRunner(self)
         self.lookup = LookupRunner(self)
         self.login = LoginChecker(self)
-        self.watches = WatchController(state, self.runner.is_running, self)
+        self.watches = WatchController(state, self.runner, self)
         self.tray = Tray(QIcon(str(resource_path("assets", "icon.ico"))), self)
         self.show_requests = ShowRequestWatcher(data_dir(), self)
 
@@ -119,7 +127,7 @@ class MainWindow(QMainWindow):
         self.account_page = AccountPage(state)
         self.activity_page = ActivityPage(state)
         self.setup_page = SetupPage(state)
-        self.updater = UpdateController(state, self, self._confirm_quit_for_update)
+        self.updater = UpdateController(state, self, self._confirm_quit_for_update, self.quit_app)
         self.update_banner = UpdateBanner()
 
         central = QWidget()
@@ -192,7 +200,7 @@ class MainWindow(QMainWindow):
         library = QVBoxLayout()
         library.setSpacing(2)
         library.addWidget(label("Library folder", "Hint"))
-        self.library_label = ElidedLabel("", "CardTitle")
+        self.library_label = ElidedLabel("CardTitle")
         self.library_label.setMaximumWidth(360)
         change = QPushButton("Change...")
         change.clicked.connect(self._choose_library)
@@ -249,9 +257,9 @@ class MainWindow(QMainWindow):
         w.names_needed.connect(lambda urls: self.lookup.lookup(urls, state.settings))
         w.status.connect(self._on_watch_status)
         w.new_tracks.connect(self._on_new_tracks)
-        w.changed.connect(self._update_tray)
+        w.changed.connect(self.update_tray)
         self.tray.open_requested.connect(self.bring_to_front)
-        self.tray.check_requested.connect(lambda: self.watches.check_now())
+        self.tray.check_requested.connect(self.watches.check_now)
         self.tray.quit_requested.connect(self.quit_app)
         self.show_requests.requested.connect(self.bring_to_front)
         self.setup_page.check_updates_requested.connect(lambda: self.updater.check(manual=True))
@@ -273,7 +281,7 @@ class MainWindow(QMainWindow):
 
     def _on_settings_changed(self, settings) -> None:
         self._save_settings_timer.start()
-        self._update_tray()
+        self.update_tray()
         self._refresh_library()
         if (settings.use_login, settings.youtube_login, settings.firefox_profile) != getattr(self, "_login_key", None):
             self._check_login()
@@ -301,17 +309,22 @@ class MainWindow(QMainWindow):
         self.login.check(settings)
 
     def _set_match_badge(self, waiting: int) -> None:
-        self._matches_waiting = waiting
-        self._refresh_nav()
+        if waiting != self._matches_waiting:
+            self._matches_waiting = waiting
+            self._show_nav_item(PAGE_MATCHES)
 
     def _refresh_nav(self) -> None:
-        """Nav texts and icons; the icons-only sidebar shows a dot where the text would show a count."""
-        for row, (name, glyph) in enumerate(NAV):
-            waiting = self._matches_waiting if row == PAGE_MATCHES else 0
-            item = self.nav.item(row)
-            item.setText("" if self._compact else f"  {name}  ({waiting})" if waiting else f"  {name}")
-            item.setToolTip(f"{name} ({waiting} waiting)" if waiting else name)
-            item.setIcon(glyph_icon(glyph, theme.SIDEBAR_TEXT, badge=bool(self._compact and waiting)))
+        for row in range(len(NAV)):
+            self._show_nav_item(row)
+
+    def _show_nav_item(self, row: int) -> None:
+        """Text and icon of one nav entry; the icons-only sidebar shows a dot where the text shows a count."""
+        name, glyph = NAV[row]
+        waiting = self._matches_waiting if row == PAGE_MATCHES else 0
+        item = self.nav.item(row)
+        item.setText("" if self._compact else f"  {name}  ({waiting})" if waiting else f"  {name}")
+        item.setToolTip(f"{name} ({waiting} waiting)" if waiting else name)
+        item.setIcon(glyph_icon(glyph, theme.SIDEBAR_TEXT, badge=bool(self._compact and waiting)))
 
     def _on_login(self, state: str, detail: str) -> None:
         self.account_page.set_login_state(state, detail)
@@ -365,7 +378,6 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, APP_NAME, f"Couldn't create it: {err}")
                 return
         save_settings(settings)
-        self.watches.pause()  # a playlist check that's running steps aside; it runs again afterwards
         for row in rows:
             self._model.update(row, status="Waiting")
         self._run_rows = rows
@@ -419,7 +431,6 @@ class MainWindow(QMainWindow):
         self.status_counts.setText(self._counts_text(totals))
         self.progress.setValue(0 if stopped else 1000)
         QApplication.alert(self)
-        QTimer.singleShot(3000, self.watches.tick)
 
     @staticmethod
     def _counts_text(counts: JobCounts) -> str:
@@ -428,15 +439,16 @@ class MainWindow(QMainWindow):
 
     # ---- followed playlists & notification area
     def _follow_from_queue(self, jobs: list) -> None:
-        added = []
+        by_folder: dict = {}
         for job in jobs:
-            if (job.kind or guess_kind(job.url)) == "Track":
-                continue  # a single track never changes
-            added += self.watches.follow([job.url], job.folder, {job.url: job.name})
-        hours = self._state.settings.watch_interval_hours
-        every = "every hour" if hours == 1 else "every day" if hours == 24 else f"every {hours} hours"
+            if is_followable(job.url, job.kind):
+                by_folder.setdefault(job.folder, []).append(job)
+        added = []
+        for folder, group in by_folder.items():
+            added += self.watches.follow([j.url for j in group], folder, {j.url: j.name for j in group})
+        every = describe_interval(self._state.settings.watch_interval_hours)
         self.queue_page.add_feedback.setText(
-            f"Following {len(added)} link(s): checked {every} (Playlists page)." if added else "Already followed."
+            f"Following {len(added)} link(s): checked every {every} (Playlists page)." if added else "Already followed."
         )
 
     def _on_watch_status(self, text: str) -> None:
@@ -448,18 +460,17 @@ class MainWindow(QMainWindow):
         if not self.isVisible() or self.isMinimized():
             self.tray.notify("New tracks downloaded", f"{count} new track(s) from {name}")
 
+    def _keeps_running_in_tray(self) -> bool:
+        return self._state.settings.run_in_background and self.watches.has_enabled() and Tray.available()
+
     def update_tray(self) -> None:
         """Show the notification-area icon when the window is hidden, or when closing will hide it."""
-        self._update_tray()
-
-    def _update_tray(self) -> None:
-        wanted = self.isHidden() or (self._state.settings.run_in_background and self.watches.has_enabled())
+        wanted = self.isHidden() or self._keeps_running_in_tray()
         if Tray.available() and wanted != self.tray.is_visible():
             self.tray.set_visible(wanted)
 
     def _hides_on_close(self) -> bool:
-        return (not self._quitting and self._state.settings.run_in_background and self.watches.has_enabled()
-                and Tray.available())
+        return not self._quitting and self._keeps_running_in_tray()
 
     def bring_to_front(self) -> None:
         if self.isMinimized():
@@ -467,7 +478,7 @@ class MainWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
-        self._update_tray()
+        self.update_tray()
 
     def quit_app(self) -> None:
         """Really quit (the tray menu's Quit, or an update)."""
@@ -569,7 +580,7 @@ class MainWindow(QMainWindow):
         if self._hides_on_close():
             self._save_state()
             self.hide()
-            self._update_tray()
+            self.update_tray()
             if not self._state.settings.tray_hint_shown:
                 self._state.update(tray_hint_shown=True)
                 self.tray.notify(APP_NAME, "Still running here, checking your followed playlists. "

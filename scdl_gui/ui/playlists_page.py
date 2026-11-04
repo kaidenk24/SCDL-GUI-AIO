@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import time
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QTimer, QUrl
-from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QTimer
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -19,25 +18,29 @@ from PySide6.QtWidgets import (
     QTableView,
 )
 
-from scdl_gui.engine import extract_links, guess_kind
+from scdl_gui.engine import extract_links
 from scdl_gui.settings import WATCH_INTERVALS
 from scdl_gui.system import set_start_with_windows
 from scdl_gui.ui import theme
-from scdl_gui.ui.folders_panel import ask_new_folder, ask_other_location, resolve_folder
-from scdl_gui.ui.queue_model import FolderDelegate, folder_choices, folder_label, folder_to_key, key_to_folder, short_link
+from scdl_gui.ui.folders_panel import add_custom_folder, ask_new_folder, ask_other_location, open_folder, resolve_folder
+from scdl_gui.ui.queue_model import (
+    FolderDelegate,
+    fill_folder_combo,
+    folder_choices,
+    folder_label,
+    folder_to_key,
+    key_to_folder,
+    short_link,
+)
 from scdl_gui.ui.state import AppState
 from scdl_gui.ui.watch_controller import WatchController
-from scdl_gui.ui.widgets import Card, FlowRow, Page, hbox, label
-from scdl_gui.watches import Watch, describe_age, describe_wait, next_check_at
+from scdl_gui.ui.widgets import Card, FlowRow, Page, add_link_actions, hbox, label
+from scdl_gui.watches import Watch, describe_age, describe_interval, describe_wait, is_followable, next_check_at
 
 COL_ON, COL_NAME, COL_FOLDER, COL_CHECKED, COL_RESULT = range(5)
 HEADERS = ("", "Playlist", "Save to", "Last checked", "Last result")
 NEW_FOLDER_KEY, OTHER_LOCATION_KEY = "\x00new", "\x00other"
 REFRESH_MS = 30_000  # keeps "5 min ago" / "next check in ..." current
-
-
-def interval_label(hours: int) -> str:
-    return "day" if hours == 24 else "hour" if hours == 1 else f"{hours} hours"
 
 
 class WatchModel(QAbstractTableModel):
@@ -47,6 +50,14 @@ class WatchModel(QAbstractTableModel):
         self._watches: list[Watch] = controller.watches
         self._live = [controller.live_status(w.url) for w in self._watches]
         controller.changed.connect(self.sync)
+        controller.live_changed.connect(self._on_live_changed)
+
+    def _on_live_changed(self, url: str) -> None:
+        """A running check's progress: only that row's result cell."""
+        row = next((n for n, w in enumerate(self._watches) if w.url == url), None)
+        if row is not None:
+            self._live[row] = self._controller.live_status(url)
+            self.dataChanged.emit(self.index(row, COL_RESULT), self.index(row, COL_RESULT))
 
     def sync(self) -> None:
         """Pick up changes without resetting the view (keeps selection, scroll position and a 'Save to'
@@ -90,8 +101,7 @@ class WatchModel(QAbstractTableModel):
     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
-        watch, col = self._watches[index.row()], index.column()
-        live = self._controller.live_status(watch.url)
+        watch, live, col = self._watches[index.row()], self._live[index.row()], index.column()
         if role == Qt.ItemDataRole.DisplayRole:
             return {
                 COL_NAME: watch.name or short_link(watch.url),
@@ -165,12 +175,16 @@ class PlaylistsPage(Page):
         self.body.addWidget(self._build_schedule_card())
 
         controller.changed.connect(self._update_summary)
-        controller.running_changed.connect(lambda _running: self._update_summary())
-        state.settings_changed.connect(lambda _s: (self._refresh_folders(), self._show_settings(), self._update_summary()))
+        state.settings_changed.connect(self._on_settings_changed)
         self._clock = QTimer(self, interval=REFRESH_MS, timeout=self._model.tick_clock)
         self._clock.timeout.connect(self._update_summary)
         self._clock.start()
-        self._refresh_folders()
+        self._shown_folders: tuple[str, ...] | None = None
+        self._on_settings_changed(state.settings)
+
+    def _on_settings_changed(self, settings) -> None:
+        if settings.folders != self._shown_folders:  # (sliders elsewhere change settings many times a second)
+            self._refresh_folders()
         self._show_settings()
         self._update_summary()
 
@@ -216,12 +230,13 @@ class PlaylistsPage(Page):
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(34)
-        for col, mode in ((COL_ON, "Fixed"), (COL_NAME, "Stretch"), (COL_FOLDER, "Interactive"),
-                          (COL_CHECKED, "ResizeToContents"), (COL_RESULT, "Stretch")):
-            header.setSectionResizeMode(col, getattr(QHeaderView.ResizeMode, mode))
+        mode = QHeaderView.ResizeMode
+        for col, how in ((COL_ON, mode.Fixed), (COL_NAME, mode.Stretch), (COL_FOLDER, mode.Interactive),
+                         (COL_CHECKED, mode.ResizeToContents), (COL_RESULT, mode.Stretch)):
+            header.setSectionResizeMode(col, how)
         self.table.setColumnWidth(COL_ON, 34)
         self.table.setColumnWidth(COL_FOLDER, 170)
-        self.delegate = FolderDelegate(lambda: folder_choices(self._state.settings.folders), self._add_folder, self.table)
+        self.delegate = FolderDelegate(lambda: self._state.settings.folders, self._add_folder, self.table)
         self.table.setItemDelegateForColumn(COL_FOLDER, self.delegate)
 
         check = QPushButton("Check now")
@@ -237,7 +252,7 @@ class PlaylistsPage(Page):
                            "page and choose Follow.", "Muted", wrap=True)
         self.interval = QComboBox()
         for hours in WATCH_INTERVALS:
-            self.interval.addItem(interval_label(hours), hours)
+            self.interval.addItem(describe_interval(hours), hours)
         self.interval.activated.connect(lambda _i: self._state.update(watch_interval_hours=self.interval.currentData()))
         card.body.addWidget(self.table, 1)
         card.body.addWidget(self.empty)
@@ -263,8 +278,8 @@ class PlaylistsPage(Page):
         if not links:
             self.feedback.setText("No soundcloud.com link found in that text.")
             return
-        singles = [u for u in links if guess_kind(u) == "Track"]
-        added = self._controller.follow([u for u in links if u not in singles], self._current_folder())
+        singles = [u for u in links if not is_followable(u)]
+        added = self._controller.follow(links, self._current_folder())
         parts = [f"Following {len(added)} link(s) - the first check starts shortly." if added else "Already following that."]
         if singles:
             parts.append(f"{len(singles)} single track link(s) skipped - add those on the Queue page.")
@@ -276,16 +291,13 @@ class PlaylistsPage(Page):
         return key_to_folder(self.folder.currentData())
 
     def _refresh_folders(self) -> None:
-        keep = self.folder.currentData() if self.folder.count() else folder_to_key(self._state.settings.new_link_folder)
-        self.folder.blockSignals(True)
-        self.folder.clear()
-        for text, folder in folder_choices(self._state.settings.folders):
-            self.folder.addItem(text, folder_to_key(folder))
+        settings = self._state.settings
+        keep = self._current_folder() if self.folder.count() else settings.new_link_folder
+        fill_folder_combo(self.folder, settings.folders, keep)
         self.folder.insertSeparator(self.folder.count())
         self.folder.addItem("New folder...", NEW_FOLDER_KEY)
         self.folder.addItem("Other location...", OTHER_LOCATION_KEY)
-        self.folder.setCurrentIndex(max(self.folder.findData(keep), 0))
-        self.folder.blockSignals(False)
+        self._shown_folders = settings.folders
         self._last_folder_key = self.folder.currentData()
 
     def _on_folder_picked(self, _index: int) -> None:
@@ -302,8 +314,7 @@ class PlaylistsPage(Page):
             self.folder.setCurrentIndex(max(self.folder.findData(self._last_folder_key), 0))
 
     def _add_folder(self, folder: str) -> None:
-        if folder and folder not in self._state.settings.folders:
-            self._state.update(folders=(*self._state.settings.folders, folder))
+        add_custom_folder(self._state, folder)
 
     # ---- list actions
     def _selected_urls(self) -> list[str]:
@@ -323,11 +334,7 @@ class PlaylistsPage(Page):
     def _open_folder(self) -> None:
         urls = self._selected_urls()
         watch = next((w for w in self._controller.watches if w.url in urls), None)
-        path = resolve_folder(self._state.settings.library, watch.folder if watch else "")
-        if path.is_dir():
-            os.startfile(path)  # noqa: S606 - opening a folder in Explorer
-        else:
-            QMessageBox.information(self, "Open folder", f"{path}\n\ndoesn't exist yet. It's created by the first download.")
+        open_folder(self, resolve_folder(self._state.settings.library, watch.folder if watch else ""))
 
     def _context_menu(self, pos) -> None:
         urls = self._selected_urls()
@@ -337,11 +344,10 @@ class PlaylistsPage(Page):
         menu.addAction("Check now", lambda: self._controller.check_now(urls))
         move = menu.addMenu("Save to")
         for text, folder in folder_choices(self._state.settings.folders):
-            move.addAction(text, lambda f=folder: [self._controller.update_watch(u, folder=f) for u in urls])
+            move.addAction(text, lambda f=folder: self._controller.update_watches(urls, folder=f))
         menu.addAction("Open folder", self._open_folder)
         menu.addSeparator()
-        menu.addAction("Open on SoundCloud", lambda: [QDesktopServices.openUrl(QUrl(u)) for u in urls[:5]])
-        menu.addAction("Copy link", lambda: QGuiApplication.clipboard().setText("\n".join(urls)))
+        add_link_actions(menu, urls)
         menu.addSeparator()
         menu.addAction("Unfollow", self._unfollow)
         menu.exec(self.table.viewport().mapToGlobal(pos))
@@ -349,15 +355,11 @@ class PlaylistsPage(Page):
     # ---- settings & summary
     def _show_settings(self) -> None:
         settings = self._state.settings
-        for widget, apply in (
-            (self.interval, lambda: self.interval.setCurrentIndex(
-                max(self.interval.findData(settings.watch_interval_hours), 0))),
-            (self.background, lambda: self.background.setChecked(settings.run_in_background)),
-            (self.startup, lambda: self.startup.setChecked(settings.start_with_windows)),
-        ):
-            widget.blockSignals(True)
-            apply()
-            widget.blockSignals(False)
+        self.interval.setCurrentIndex(max(self.interval.findData(settings.watch_interval_hours), 0))
+        for box, checked in ((self.background, settings.run_in_background), (self.startup, settings.start_with_windows)):
+            box.blockSignals(True)  # (toggled fires for programmatic changes too)
+            box.setChecked(checked)
+            box.blockSignals(False)
 
     def _set_startup(self, enabled: bool) -> None:
         QGuiApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)

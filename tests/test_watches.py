@@ -37,8 +37,19 @@ class ScheduleTests(unittest.TestCase):
         fresh = Watch(A, last_checked=now - 2 * HOUR)
         stale = Watch(B, last_checked=now - 3 * HOUR)
         paused = Watch(C, enabled=False)
-        self.assertEqual(watches.due_watches([fresh, stale, paused], now, 3), [stale])
+        self.assertEqual([w for w in (fresh, stale, paused) if watches.is_due(w, now, 3)], [stale])
         self.assertTrue(watches.is_due(Watch(A), now, 24))  # never checked
+
+    def test_single_tracks_cannot_be_followed(self):
+        track = "https://soundcloud.com/dj/a-song"
+        self.assertFalse(watches.is_followable(track))
+        self.assertFalse(watches.is_followable("https://on.soundcloud.com/abc", kind="Track"))  # looked up
+        self.assertTrue(watches.is_followable("https://soundcloud.com/dj/likes"))
+        items, added = watches.add_watches([], [A, track], None)
+        self.assertEqual((added, [w.url for w in items]), ([A], [A]))
+
+    def test_interval_wording(self):
+        self.assertEqual([watches.describe_interval(h) for h in (1, 3, 24)], ["hour", "3 hours", "day"])
 
     def test_next_check(self):
         items = [Watch(A, last_checked=10 * HOUR), Watch(B, last_checked=5 * HOUR), Watch(C, enabled=False)]
@@ -58,6 +69,7 @@ class ScheduleTests(unittest.TestCase):
 
     def test_clock_turned_back_does_not_stall_checks(self):
         self.assertTrue(watches.is_due(Watch(A, last_checked=50 * HOUR), 10 * HOUR, 3))
+        self.assertTrue(watches.is_due(Watch(A, retry_at=50 * HOUR), 10 * HOUR, 3))
 
     def test_adding_skips_links_already_followed(self):
         items, added = watches.add_watches([Watch(A, folder="Gym")], [A, B, B], "Car")
@@ -126,6 +138,7 @@ class ControllerTests(TempAppData):
 
     def setUp(self):
         super().setUp()
+        from scdl_gui.runner import DownloadRunner
         from scdl_gui.settings import Settings
         from scdl_gui.ui import watch_controller
         from scdl_gui.ui.state import AppState
@@ -133,10 +146,12 @@ class ControllerTests(TempAppData):
         self.library = Path(self._tmp.name) / "Music"
         self.library.mkdir()
         self.state = AppState(Settings(library=str(self.library), watch_interval_hours=3))
-        self.blocked = False
+        self.blocked = False  # a download you started yourself is running
         self._ffmpeg = mock.patch.object(watch_controller, "find_ffmpeg", return_value="ffmpeg.exe")
         self._ffmpeg.start()
-        self.controller = watch_controller.WatchController(self.state, lambda: self.blocked)
+        self.your_runner = DownloadRunner()
+        self.your_runner.is_running = lambda: self.blocked
+        self.controller = watch_controller.WatchController(self.state, self.your_runner)
         self.started: list = []
         self.controller.runner.start = lambda entries, _settings: self.started.append(entries)
         self.controller.runner.is_running = lambda: bool(self.started) and not self.finished
@@ -176,6 +191,21 @@ class ControllerTests(TempAppData):
         self.blocked = True
         self.controller.tick()
         self.assertEqual(self.started, [])
+
+    def test_your_download_pauses_a_running_check_and_it_resumes_after(self):
+        from scdl_gui.ui import watch_controller
+
+        self.follow(A)
+        self.controller.tick()
+        with mock.patch.object(self.controller.runner, "stop") as stop:
+            self.your_runner.started.emit()
+        stop.assert_called_once()
+        self.run_finished(0, "Stopped", JobCounts())
+        self.finished = True
+        self.controller.runner.finished.emit(JobCounts(), True)
+        with mock.patch.object(watch_controller.QTimer, "singleShot") as later:
+            self.your_runner.finished.emit(JobCounts(), False)
+        self.assertEqual(later.call_args.args, (watch_controller.AFTER_YOUR_RUN_MS, self.controller.tick))
 
     def test_a_stopped_check_runs_again(self):
         self.follow(A)

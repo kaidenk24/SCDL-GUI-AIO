@@ -42,6 +42,14 @@ def folder_choices(custom_folders: tuple[str, ...]) -> list[tuple[str, str | Non
     ]
 
 
+def fill_folder_combo(combo: QComboBox, custom_folders: tuple[str, ...], selected: str | None = FOLDER_AUTO) -> None:
+    """The 'Save to' choices, with `selected` picked (Auto if it's not there)."""
+    combo.clear()
+    for text, folder in folder_choices(custom_folders):
+        combo.addItem(text, folder_to_key(folder))
+    combo.setCurrentIndex(max(combo.findData(folder_to_key(selected)), 0))
+
+
 def _status_color(status: str) -> str:
     if status.startswith("Done"):
         return theme.WARNING if "failed" in status else theme.SUCCESS
@@ -198,17 +206,17 @@ class QueueModel(QAbstractTableModel):
 class FolderDelegate(QStyledItemDelegate):
     """Editable drop-down in the 'Save to' column; typing a new name creates that folder."""
 
-    def __init__(self, choices: Callable[[], list], on_new_folder: Callable[[str], None], parent=None) -> None:
+    def __init__(self, custom_folders: Callable[[], tuple[str, ...]], on_new_folder: Callable[[str], None],
+                 parent=None) -> None:
         super().__init__(parent)
-        self._choices = choices
+        self._custom_folders = custom_folders
         self._on_new_folder = on_new_folder
 
     def createEditor(self, parent, option, index):
         combo = QComboBox(parent)
         combo.setEditable(True)
         combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        for text, folder in self._choices():
-            combo.addItem(text, folder_to_key(folder))
+        fill_folder_combo(combo, self._custom_folders())
         combo.activated.connect(lambda _i: (self.commitData.emit(combo), self.closeEditor.emit(combo)))
         return combo
 

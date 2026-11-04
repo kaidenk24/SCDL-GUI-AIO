@@ -77,11 +77,13 @@ class UpdateController(QObject):
     available = Signal(object)  # Release
     message = Signal(str)  # result of a manual check
 
-    def __init__(self, state: AppState, parent: QWidget, can_quit: Callable[[], bool]) -> None:
+    def __init__(self, state: AppState, parent: QWidget, can_quit: Callable[[], bool],
+                 quit_app: Callable[[], None]) -> None:
         super().__init__(parent)
         self._state = state
         self._parent = parent
         self._can_quit = can_quit
+        self._quit_app = quit_app  # closes for real (not into the notification area), saving the queue
         self._bridge = _Bridge()
         self._bridge.checked.connect(self._on_checked)
         self._bridge.progress.connect(self._on_progress)
@@ -202,7 +204,6 @@ class UpdateController(QObject):
             self._quit()
 
     def _quit(self) -> None:
-        """Close through the window (saves the queue and settings), then leave the event loop. quit_app()
-        closes for real instead of hiding in the notification area."""
-        getattr(self._parent, "quit_app", self._parent.close)()
+        """Close through the window (saves the queue and settings), then leave the event loop."""
+        self._quit_app()
         QApplication.quit()

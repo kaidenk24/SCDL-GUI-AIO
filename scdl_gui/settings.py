@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import sys
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import MISSING, asdict, dataclass, fields, replace
 from pathlib import Path
 
 from scdl_gui import APP_NAME
@@ -103,20 +103,19 @@ def data_dir() -> Path:
 
 
 def _coerce(cls, raw: dict):
-    """Build a dataclass from JSON, ignoring unknown keys and values of the wrong type."""
-    defaults = cls() if cls is Settings else None
+    """Build a dataclass from JSON, ignoring unknown keys and values whose type doesn't match the field's
+    default (fields without a default, or defaulting to None, are left to the caller to check)."""
     values = {}
     for f in fields(cls):
         if f.name not in raw:
             continue
-        value = raw[f.name]
+        value, default = raw[f.name], f.default
         if f.name == "folders":
             value = tuple(str(v) for v in value) if isinstance(value, list) else ()
-        elif defaults is not None:
-            expected = type(getattr(defaults, f.name))
-            if isinstance(getattr(defaults, f.name), float) and isinstance(value, int):
+        elif default is not MISSING and default is not None:
+            if isinstance(default, float) and isinstance(value, int) and not isinstance(value, bool):
                 value = float(value)
-            if getattr(defaults, f.name) is not None and not isinstance(value, expected):
+            if not isinstance(value, type(default)) or (isinstance(value, bool) and not isinstance(default, bool)):
                 continue
         values[f.name] = value
     return cls(**values)

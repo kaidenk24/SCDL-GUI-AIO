@@ -229,10 +229,11 @@ class ShowRequestTests(UiTest):
 
 class PlaylistsTableTests(UiTest):
     def test_refresh_leaves_the_save_to_cell_being_edited_alone(self):
+        from scdl_gui.runner import DownloadRunner
         from scdl_gui.ui.playlists_page import COL_FOLDER, WatchModel
         from scdl_gui.ui.watch_controller import WatchController
 
-        controller = WatchController(AppState(Settings(library=self._tmp.name)), lambda: True)
+        controller = WatchController(AppState(Settings(library=self._tmp.name)), DownloadRunner())
         controller.follow(["https://soundcloud.com/a/sets/b", "https://soundcloud.com/a/sets/c"], None)
         model = WatchModel(controller)
         touched = []

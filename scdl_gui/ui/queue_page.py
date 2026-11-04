@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QModelIndex, Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtCore import QModelIndex, Qt, Signal
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -28,12 +28,13 @@ from scdl_gui.ui.queue_model import (
     COL_TYPE,
     FolderDelegate,
     QueueModel,
+    fill_folder_combo,
     folder_choices,
-    folder_to_key,
     key_to_folder,
 )
 from scdl_gui.ui.state import AppState
-from scdl_gui.ui.widgets import Card, FlowRow, Page, ResponsiveSplitter, hbox, label
+from scdl_gui.ui.widgets import Card, FlowRow, Page, ResponsiveSplitter, add_link_actions, hbox, label
+from scdl_gui.watches import is_followable
 
 PASTE_HINT = (
     "Paste SoundCloud links here - playlists, albums, your likes, a profile, single tracks or "
@@ -109,15 +110,14 @@ class QueuePage(Page):
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(34)
-        for col, mode in ((COL_ON, "Fixed"), (COL_NAME, "Stretch"), (COL_TYPE, "ResizeToContents"),
-                          (COL_FOLDER, "Interactive"), (COL_STATUS, "Stretch")):
-            header.setSectionResizeMode(col, getattr(QHeaderView.ResizeMode, mode))
+        mode = QHeaderView.ResizeMode
+        for col, how in ((COL_ON, mode.Fixed), (COL_NAME, mode.Stretch), (COL_TYPE, mode.ResizeToContents),
+                         (COL_FOLDER, mode.Interactive), (COL_STATUS, mode.Stretch)):
+            header.setSectionResizeMode(col, how)
         self.table.setColumnWidth(COL_ON, 34)
         self.table.setColumnWidth(COL_FOLDER, 170)
         self.table.setColumnHidden(COL_LINK, True)  # shown as the Name tooltip and in the right-click menu
-        self.delegate = FolderDelegate(
-            lambda: folder_choices(self._state.settings.folders), self._on_new_folder, self.table
-        )
+        self.delegate = FolderDelegate(lambda: self._state.settings.folders, self._on_new_folder, self.table)
         self.table.setItemDelegateForColumn(COL_FOLDER, self.delegate)
         QShortcut(QKeySequence.StandardKey.Delete, self.table, activated=self._remove_selected)
 
@@ -209,21 +209,16 @@ class QueuePage(Page):
         menu.addAction("Download again", lambda: [self._model.update(r, status="Queued", enabled=True) for r in rows])
         follow = menu.addAction("Follow - download new tracks automatically",
                                 lambda: self.follow_requested.emit([self._model.job(r) for r in rows]))
-        follow.setEnabled(any(self._model.job(r).kind != "Track" for r in rows))
+        follow.setEnabled(any(is_followable(self._model.job(r).url, self._model.job(r).kind) for r in rows))
         menu.addAction("Look up name", lambda: self.lookup_requested.emit([self._model.job(r).url for r in rows]))
-        urls = [self._model.job(r).url for r in rows]
-        menu.addAction("Open on SoundCloud", lambda: [QDesktopServices.openUrl(QUrl(u)) for u in urls[:5]])
-        menu.addAction("Copy link", lambda: QGuiApplication.clipboard().setText("\n".join(urls)))
+        add_link_actions(menu, [self._model.job(r).url for r in rows])
         menu.addSeparator()
         menu.addAction("Remove", lambda: self._model.remove(rows))
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _refresh_new_link_folders(self) -> None:
-        self.new_link_folder.clear()
-        for text, folder in folder_choices(self._state.settings.folders):
-            self.new_link_folder.addItem(text, folder_to_key(folder))
-        position = self.new_link_folder.findData(folder_to_key(self._state.settings.new_link_folder))
-        self.new_link_folder.setCurrentIndex(max(position, 0))
+        settings = self._state.settings
+        fill_folder_combo(self.new_link_folder, settings.folders, settings.new_link_folder)
 
     def _update_summary(self) -> None:
         jobs = self._model.jobs
