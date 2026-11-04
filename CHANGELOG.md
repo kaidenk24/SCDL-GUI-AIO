@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.2
 
 - Fix tracks failing with `'__real_download'` when the MP3 was already in the folder but not in the
   download archive (e.g. the first check of a followed playlist into a folder you'd downloaded before).
