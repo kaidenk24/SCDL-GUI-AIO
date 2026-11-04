@@ -273,5 +273,27 @@ class ControllerTests(TempAppData):
         self.assertEqual([job.url for _row, job in self.started[-1]], [B])
 
 
+class ExistingFileTests(unittest.TestCase):
+    """A followed playlist's track whose MP3 is already in the folder but not in the download archive."""
+
+    def test_counts_as_already_had_instead_of_failing(self):
+        # yt-dlp leaves __real_download unset for a file it finds already there; scdl's tagger then
+        # failed with KeyError '__real_download', so the track never reached the archive.
+        from scdl_gui import worker
+
+        _files, info = worker.ExistingFilePP().run({"filepath": "x.mp3"})
+        self.assertIs(info["__real_download"], False)
+        _files, info = worker.ExistingFilePP().run({"__real_download": True})
+        self.assertIs(info["__real_download"], True)
+
+    def test_existing_mp3_is_not_re_encoded(self):
+        from scdl_gui import worker
+
+        loudness = worker.LoudnessMp3PP()
+        existing = {"filepath": "E:/hard/Song.mp3", "ext": "mp3", "__real_download": False}
+        with mock.patch.object(loudness, "_measure", side_effect=AssertionError("re-encoded")):
+            self.assertEqual(loudness.run(dict(existing)), ([], existing))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -279,6 +279,9 @@ class LoudnessMp3PP(FFmpegPostProcessor):
 
     def run(self, info):
         source = info["filepath"]
+        if not info.get("__real_download") and source.endswith(".mp3"):
+            return [], info  # already in the folder (but not in the archive): don't re-encode it
+        info["__real_download"] = True  # a new MP3, so scdl's tagger tags it
         target = replace_extension(source, "mp3")
         output = prepend_extension(target, "temp") if target == source else target
         stats = self._measure(source)
@@ -316,6 +319,16 @@ def outtmpl_run(self, info):
 OuttmplPP.run = outtmpl_run
 
 
+class ExistingFilePP(PostProcessor):
+    """yt-dlp only sets __real_download when it downloads, not when the file is already in the folder;
+    scdl's tagger then failed with KeyError '__real_download', so the track never reached the archive
+    and every check tried it again. Default it to False (= nothing new) before the download step."""
+
+    def run(self, info):
+        info.setdefault("__real_download", False)
+        return [], info
+
+
 class AlbumModePP(PostProcessor):
     """Album tag for the "title" and "none" settings. yt-dlp itself labels tracks from a SoundCloud
     playlist with album = playlist and album artist = its owner (scdl's --no-album-tag can't stop that),
@@ -341,6 +354,7 @@ _original_build = scdl_main._build_ytdl_params
 def build_params(url, scdl_args):
     global _archive_path
     url, params, postprocessors = _original_build(url, scdl_args)
+    postprocessors.append((ExistingFilePP(), "before_dl"))
     if ALBUM_MODE in ("title", "none"):
         postprocessors.append((AlbumModePP(ALBUM_MODE), "pre_process"))  # after scdl's OuttmplPP
     _output_templates.update({

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Fix tracks failing with `'__real_download'` when the MP3 was already in the folder but not in the
+  download archive (e.g. the first check of a followed playlist into a folder you'd downloaded before).
+  Such tracks were also re-encoded on every check; now they're left untouched, counted as already had,
+  and added to the archive so later checks skip them straight away.
+
 ## 1.1.1
 
 - YouTube matches are found about 8x faster (a batch of 3 tracks: 95 s -> 11 s; the first result in

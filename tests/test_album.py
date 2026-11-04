@@ -130,6 +130,7 @@ class RetagTests(unittest.TestCase):
         with mock.patch.object(worker, "ALBUM_MODE", "title"):
             _url, params, postprocessors = worker.build_params(url, scdl_args)
         self.assertTrue(any(isinstance(pp, worker.AlbumModePP) for pp, _when in postprocessors))
+        self.assertIn("before_dl", [when for pp, when in postprocessors if isinstance(pp, worker.ExistingFilePP)])
         self.assertEqual(params["final_ext"], "mp3")
 
     def test_worker_none_mode_clears_everything(self):
