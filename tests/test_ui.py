@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication, QPushButton, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton, QWidget  # noqa: E402
 
-from scdl_gui.matches import REVIEW, SEARCHING, MatchItem  # noqa: E402
+from scdl_gui.matches import DOWNLOADING, REVIEW, SEARCHING, MatchItem  # noqa: E402
 from scdl_gui.settings import Settings  # noqa: E402
 from scdl_gui.ui.state import AppState  # noqa: E402
 
@@ -119,6 +119,43 @@ class MatchesListTests(UiTest):
         self.assertEqual(item.status, SEARCHING)
         page._on_found({"key": item.key, "query": "better words", "candidates": [candidate(1)]})
         self.assertEqual([c["url"] for c in item.candidates], [candidate(1)["url"]])
+
+    def test_remove_selected_tracks(self):
+        from scdl_gui.ui import matches_page
+
+        page = self.make_page(5)
+        page._items[2].status = DOWNLOADING
+        page.searcher._waiting = [{"key": page._items[1].key, "track": {}, "query": ""}]
+        page.list.clearSelection()
+        for row in (1, 2, 3):
+            page.list.item(row).setSelected(True)
+        self.assertEqual(page.remove.text(), "Remove 3 tracks")
+        with mock.patch.object(matches_page.QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+            page._remove_selected()
+        self.assertEqual(len(page._items), 5)  # you said no
+        with mock.patch.object(matches_page.QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+            page._remove_selected()
+        self.assertEqual([i.track["title"] for i in page._items], ["Track 0", "Track 2", "Track 4"])  # 2 is downloading
+        self.assertEqual(page.searcher._waiting, [])  # no searching for tracks that are gone
+        self.assertEqual(page.list.currentRow(), 1)  # the list stays where you were
+        page.add_track({"sc_id": "3", "title": "Track 3", "target": "t3"}, scheduled=True)
+        self.assertEqual(len(page._items), 3)  # automatic checks don't bring it back
+
+    def test_select_all_and_remove_one_without_asking(self):
+        from scdl_gui.ui import matches_page
+
+        page = self.make_page(3)
+        page.select_all.click()
+        self.assertEqual(len(page.list.selectedItems()), 3)
+        self.assertEqual(page.select_all.text(), "Select none")
+        page.select_all.click()
+        self.assertEqual(page.list.selectedItems(), [])
+        self.assertFalse(page.remove.isEnabled())
+        page.list.setCurrentRow(0)
+        with mock.patch.object(matches_page.QMessageBox, "question") as ask:
+            page._remove_selected()
+        ask.assert_not_called()
+        self.assertEqual(len(page._items), 2)
 
     def test_added_and_removed_tracks(self):
         page = self.make_page(3)

@@ -5,13 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices
+from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QTreeWidget,
@@ -94,7 +95,7 @@ class MatchesPage(Page):
         self.list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.currentRowChanged.connect(lambda _row: (self._show_selected(), self._search_selected_first()))
-        splitter = ResponsiveSplitter(self.list, self._build_detail(), stack_below=820,
+        splitter = ResponsiveSplitter(self._build_list(), self._build_detail(), stack_below=820,
                                       wide_sizes=(300, 700), stacked_sizes=(150, 500))
         splitter.setStretchFactor(1, 1)
         self.body.addWidget(splitter, 1)
@@ -103,6 +104,25 @@ class MatchesPage(Page):
         QTimer.singleShot(0, self._resume)
 
     # ---- layout
+    def _build_list(self) -> QWidget:
+        """The tracks, with Ctrl/Shift-click, Ctrl+A or Select all to pick several and Remove to take them off."""
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.list.itemSelectionChanged.connect(self._update_list_buttons)
+        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._list_menu)
+        QShortcut(QKeySequence.StandardKey.Delete, self.list, activated=self._remove_selected)
+        self.select_all = QPushButton("Select all")
+        self.select_all.clicked.connect(self._toggle_select_all)
+        self.remove = QPushButton("Remove")
+        self.remove.setToolTip("Take the selected tracks off the list (Delete)")
+        self.remove.clicked.connect(self._remove_selected)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.list, 1)
+        layout.addWidget(FlowRow(self.select_all, self.remove))
+        return panel
+
     def _build_detail(self) -> QWidget:
         card = Card("")
         self.detail_title = card.title
@@ -274,6 +294,64 @@ class MatchesPage(Page):
         self._items = [i for i in self._items if i.status not in (SAVED, SKIPPED)]
         self._changed()
 
+    def _selected_items(self) -> list[MatchItem]:
+        keys = {entry.data(Qt.ItemDataRole.UserRole) for entry in self.list.selectedItems()}
+        return [i for i in self._items if i.key in keys]
+
+    def _toggle_select_all(self) -> None:
+        if self._items and len(self.list.selectedItems()) == len(self._items):
+            self.list.clearSelection()
+        else:
+            self.list.selectAll()
+
+    def _remove_selected(self) -> None:
+        """Take tracks off the list. Like skipping, automatic checks of followed playlists don't add them
+        back; downloading the playlist yourself does. A track that's downloading finishes first."""
+        chosen = self._selected_items()
+        removable = [i for i in chosen if i.status != DOWNLOADING]
+        if not removable:
+            if chosen:
+                QMessageBox.information(self, "YouTube matches", "Wait for the download to finish, then remove it.")
+            return
+        if len(removable) > 1:
+            busy = len(chosen) - len(removable)
+            note = f"\n\n{busy} track(s) still downloading stay on the list." if busy else ""
+            answer = QMessageBox.question(
+                self, "Remove tracks",
+                f"Remove {len(removable)} tracks from the list?\n\nAutomatic checks of followed playlists won't "
+                f"add them again; downloading the playlist yourself will.{note}",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        first_row = min(self.list.row(e) for e in self.list.selectedItems())
+        keys = {i.key for i in removable}
+        for key in keys:
+            self.searcher.take(key)
+            self.quick_searcher.take(key)
+        self._skipped |= keys
+        save_skipped(self._skipped)
+        self._items = [i for i in self._items if i.key not in keys]
+        self._changed()
+        if self._items:
+            self.list.setCurrentRow(min(first_row, len(self._items) - 1))
+
+    def _list_menu(self, pos) -> None:
+        if not self.list.selectedItems():
+            return
+        menu = QMenu(self)
+        menu.addAction("Select all", self.list.selectAll)
+        menu.addSeparator()
+        menu.addAction(self.remove.text(), self._remove_selected)
+        menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def _update_list_buttons(self) -> None:
+        selected = len(self.list.selectedItems())
+        self.remove.setEnabled(selected > 0)
+        self.remove.setText(f"Remove {selected} tracks" if selected > 1 else "Remove")
+        everything = bool(self._items) and selected == len(self._items)
+        self.select_all.setText("Select none" if everything else "Select all")
+        self.select_all.setEnabled(bool(self._items))
+
     # ---- display
     def _changed(self) -> None:
         save_matches(self._items)
@@ -304,6 +382,7 @@ class MatchesPage(Page):
             first_open = next((n for n, i in enumerate(self._items) if i.status in NEEDS_USER), 0)
             self.list.setCurrentRow(first_open)
         self.list.blockSignals(False)
+        self._update_list_buttons()
         counts = {s: sum(1 for i in self._items if i.status == s) for s in STATUS_TEXT}
         self.summary.setText(
             f"{self.needs_user()} waiting for you  -  {counts[SEARCHING]} searching  -  "

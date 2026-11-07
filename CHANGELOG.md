@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- YouTube matches: select several tracks (Ctrl/Shift-click, Ctrl+A or *Select all*) and *Remove* them
+  from the list (also the Delete key or right-click). Like skipping, automatic checks of followed playlists
+  don't add removed tracks back; downloading the playlist yourself does.
+
 ## 1.1.2
 
 - Fix tracks failing with `'__real_download'` when the MP3 was already in the folder but not in the
