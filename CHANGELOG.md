@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.3
 
 - YouTube matches: select several tracks (Ctrl/Shift-click, Ctrl+A or *Select all*) and *Remove* them
   from the list (also the Delete key or right-click). Like skipping, automatic checks of followed playlists
