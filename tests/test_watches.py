@@ -289,7 +289,7 @@ class ExistingFileTests(unittest.TestCase):
     def test_existing_mp3_is_not_re_encoded(self):
         from scdl_gui import worker
 
-        loudness = worker.LoudnessMp3PP()
+        loudness = worker.LoudnessPP()
         existing = {"filepath": "E:/hard/Song.mp3", "ext": "mp3", "__real_download": False}
         with mock.patch.object(loudness, "_measure", side_effect=AssertionError("re-encoded")):
             self.assertEqual(loudness.run(dict(existing)), ([], existing))

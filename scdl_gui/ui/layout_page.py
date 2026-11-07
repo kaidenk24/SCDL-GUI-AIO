@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QFrame, QLineEdit, QVBoxLayout
 
+from scdl_gui.formats import audio_format
 from scdl_gui.templates import FILE_PRESETS, FOLDER_PRESETS, preview_paths, unknown_tokens
 from scdl_gui.ui.state import AppState
 from scdl_gui.ui.widgets import Card, OptionList, Page, TokenBar, label
@@ -99,7 +100,7 @@ class LayoutPage(Page):
             FOLDER_PRESETS, lambda t: state.update(folder_template=t),
         )
         self.files = TemplateChooser(
-            "File names", "What each MP3 is called (.mp3 is added for you).",
+            "File names", "What each song file is called (.mp3, .m4a... is added for you).",
             [(name, t) for name, t in FILE_PRESETS], lambda t: state.update(file_template=t),
         )
         for chooser in (self.folders, self.files):
@@ -160,7 +161,8 @@ class LayoutPage(Page):
                 item.widget().deleteLater()
         settings = self._state.settings
         try:
-            rows = preview_paths(settings.library, settings.folder_template, settings.file_template)
+            ext = audio_format(settings.audio_format).ext or "m4a"
+            rows = preview_paths(settings.library, settings.folder_template, settings.file_template, ext)
         except Exception as err:  # a half-typed template must never crash the page
             rows = [("Can't preview", str(err))]
         for caption, path in rows:

@@ -9,13 +9,23 @@ import os
 import re
 import shutil
 import sys
+import urllib.parse
 from pathlib import Path
 
 from scdl_gui import potoken
 from scdl_gui.settings import FOLDER_AUTO, Job, Settings, app_dir
 from scdl_gui.templates import output_target
 
-URL_RE = re.compile(r"https?://(?:www\.|m\.|on\.)?soundcloud\.com/[^\s\"'<>|]+", re.IGNORECASE)
+URL_RE = re.compile(
+    r"https?://(?:(?:www\.|m\.|on\.)?soundcloud\.com|(?:www\.|m\.|music\.)?youtube\.com|youtu\.be)/[^\s\"'<>|]+",
+    re.IGNORECASE,
+)
+YOUTUBE_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be")
+SINGLE_KINDS = ("Track", "YouTube video")  # one song, not a list that can get new tracks
+TRAILING_PUNCTUATION = ").,;:!'\"]>"
+VIDEO_PATH = re.compile(r"^/(?:shorts|live|embed|v)/[\w-]+$")
+# Channels (optionally one tab, e.g. /@artist/videos) and YouTube Music albums/artists.
+CHANNEL_PATH = re.compile(r"^/(?:@[^/]+|channel/[\w-]+|c/[^/]+|user/[^/]+|browse/[\w-]+)(?:/[\w-]+)?$")
 FAILED_LOG_NAME = "soundcloud-failed.txt"
 LAUNCHER_NAME = "scdl-gui.pyw"
 ARCHIVE_NAME = "download_archive.txt"
@@ -33,21 +43,63 @@ _LIST_SUFFIX_KINDS = {
 
 
 def extract_links(text: str) -> list[str]:
-    """All soundcloud.com links in any pasted text, cleaned of tracking junk, in order, no repeats."""
+    """All SoundCloud and YouTube links in any pasted text, cleaned of tracking junk, in order, no repeats."""
     links: list[str] = []
     for line in text.splitlines():
         if line.lstrip().startswith("#"):
             continue
         for match in URL_RE.finditer(line):
-            # Drop ?si=..&utm_.. tracking; private-link secrets live in the path.
-            link = re.split(r"[?#]", match.group(0), maxsplit=1)[0].rstrip("/")
-            if link not in links:
+            found = match.group(0).rstrip(TRAILING_PUNCTUATION)  # "(see https://...)" or a link ending a sentence
+            link = _clean_youtube(found) if is_youtube(found) else _clean_soundcloud(found)
+            if link and link not in links:
                 links.append(link)
     return links
 
 
+def _clean_soundcloud(link: str) -> str:
+    # Drop ?si=..&utm_.. tracking; private-link secrets live in the path.
+    return re.split(r"[?#]", link, maxsplit=1)[0].rstrip("/")
+
+
+def _clean_youtube(link: str) -> str:
+    """Keep only what says which video/playlist/channel it is ("" for anything else, e.g. search results or
+    your history). A video opened from a playlist (watch?v=..&list=..) means that video; youtu.be, /shorts/,
+    /live/ and /embed/ links become normal watch links."""
+    parts = urllib.parse.urlsplit(link)
+    host = (parts.hostname or "").lower()
+    host = "www.youtube.com" if host in ("youtube.com", "m.youtube.com", "youtu.be") else host
+    path = parts.path.rstrip("/")
+    query = urllib.parse.parse_qs(parts.query)
+    video = (query.get("v") or [""])[0]
+    if (parts.hostname or "").lower() == "youtu.be":
+        video, path = path.strip("/"), "/watch"
+    elif VIDEO_PATH.match(path):
+        video, path = path.split("/")[2], "/watch"
+    if path == "/watch":
+        return f"https://{host}/watch?v={video}" if video else ""
+    if path == "/playlist":
+        playlist = (query.get("list") or [""])[0]
+        return f"https://{host}/playlist?list={playlist}" if playlist else ""
+    return f"https://{host}{path}" if CHANNEL_PATH.match(path) else ""
+
+
+def is_youtube(url: str) -> bool:
+    return (urllib.parse.urlsplit(url).hostname or "").lower() in YOUTUBE_HOSTS
+
+
+def _youtube_kind(url: str) -> str:
+    path = urllib.parse.urlsplit(url).path
+    if path == "/watch":
+        return "YouTube video"
+    if path == "/playlist" or path.startswith("/browse/"):
+        return "YouTube playlist"
+    return "YouTube channel"
+
+
 def guess_kind(url: str) -> str:
     """Quick, offline guess of what a link points at (the lookup refines it)."""
+    if is_youtube(url):
+        return _youtube_kind(url)
     host_and_path = re.sub(r"^https?://", "", url, flags=re.IGNORECASE)
     host, _, path = host_and_path.partition("/")
     if host.lower().startswith("on."):
@@ -70,6 +122,8 @@ def guess_kind(url: str) -> str:
 
 def link_slug(url: str) -> str:
     path = re.sub(r"^https?://[^/]+/", "", url)
+    if is_youtube(url):
+        path = "youtube_" + path
     return re.sub(r"[^\w\-]+", "_", path).strip("_") or "link"
 
 
@@ -154,10 +208,11 @@ def archive_path(settings: Settings, job: Job) -> Path | None:
 
 
 def worker_args(settings: Settings, job: Job) -> list[str]:
-    """scdl arguments for one queued link."""
+    """scdl arguments for one queued link (YouTube links take the same ones, after --youtube)."""
     layout = settings.folder_template if job.folder is FOLDER_AUTO else job.folder
     target = output_target(settings.library, layout, settings.file_template)
     args = [
+        *(["--youtube"] if is_youtube(job.url) else []),
         "-l", job.url,
         "--path", target.base,
         "--no-playlist-folder",
@@ -195,7 +250,9 @@ def _pot_env(settings: Settings) -> dict[str, str]:
 
 def worker_env(settings: Settings, source_url: str = "") -> dict[str, str]:
     return {
+        "SCDL_FORMAT": settings.audio_format,
         "SCDL_MP3_QUALITY": settings.quality,
+        "SCDL_BITRATE": str(settings.opus_bitrate if settings.audio_format == "opus" else settings.aac_bitrate),
         "SCDL_TARGET_LUFS": f"{settings.target_lufs:g}" if settings.normalize else "",
         "SCDL_BROWSER": settings.cookie_browser,
         "SCDL_SC_LOGIN": "1" if settings.use_login else "0",

@@ -37,8 +37,8 @@ from scdl_gui.ui.widgets import Card, FlowRow, Page, ResponsiveSplitter, add_lin
 from scdl_gui.watches import is_followable
 
 PASTE_HINT = (
-    "Paste SoundCloud links here - playlists, albums, your likes, a profile, single tracks or "
-    "on.soundcloud.com share links. Any text works; the links are picked out for you."
+    "Paste SoundCloud or YouTube links here - playlists, albums, your likes, a profile or channel, single "
+    "tracks and videos, or share links. Any text works; the links are picked out for you."
 )
 
 
@@ -154,7 +154,7 @@ class QueuePage(Page):
     def add_links(self, text: str) -> None:
         links = extract_links(text)
         if not links:
-            self.add_feedback.setText("No soundcloud.com links found in that text.")
+            self.add_feedback.setText("No SoundCloud or YouTube links found in that text.")
             return
         added = self._model.add(links, self._state.settings.new_link_folder)
         skipped = len(links) - len(added)

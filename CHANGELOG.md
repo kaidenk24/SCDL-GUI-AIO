@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **YouTube links**: paste YouTube or YouTube Music videos, playlists and channels into the queue, or follow
+  YouTube playlists and channels on the Playlists page. Same folders, file names, archive, levelling and tags as
+  SoundCloud links; YouTube's best stream (256k with Premium + PO tokens). If your YouTube login can't be read,
+  it downloads without it instead of failing.
+- **Output formats** (Audio page): MP3, AAC (.m4a), Opus, FLAC, WAV, or *Best available - no conversion*, with
+  bitrate choices for AAC and Opus. Volume levelling encodes straight to the chosen format.
+- No needless re-encoding: with levelling off, a stream already in the chosen format (SoundCloud's AAC for .m4a,
+  YouTube's AAC/Opus) is only repackaged - faster, and no quality lost.
+- YouTube matches for DRM-protected tracks are saved in the chosen format, tagged the same way.
+- *Apply to songs already in my library* (Album tag) now handles M4A, FLAC, Opus and WAV as well as MP3.
+
 ## 1.1.3
 
 - YouTube matches: select several tracks (Ctrl/Shift-click, Ctrl+A or *Select all*) and *Remove* them

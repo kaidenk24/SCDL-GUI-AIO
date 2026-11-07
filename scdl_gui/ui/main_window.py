@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from scdl_gui import APP_NAME, APP_VERSION
-from scdl_gui.engine import find_ffmpeg
+from scdl_gui.engine import SINGLE_KINDS, find_ffmpeg
 from scdl_gui.parsing import JobCounts
 from scdl_gui.runner import DownloadRunner, LoginChecker, LookupRunner
 from scdl_gui.settings import data_dir, load_queue, resource_path, save_queue, save_settings
@@ -349,7 +349,7 @@ class MainWindow(QMainWindow):
                 continue
             title = data.get("title") or ""
             kind = data.get("kind") or self._model.job(row).kind
-            if kind == "Track" and data.get("uploader"):
+            if kind in SINGLE_KINDS and data.get("uploader"):
                 title = f"{title}  ({data['uploader']})"
             self._model.update(row, name=title, kind=kind)
         self._save_queue_timer.start()
@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
             self.nav.setCurrentRow(PAGE_QUEUE)
             return
         if not find_ffmpeg(settings):
-            QMessageBox.warning(self, APP_NAME, "FFmpeg wasn't found, so nothing can be converted to MP3.\n"
+            QMessageBox.warning(self, APP_NAME, "FFmpeg wasn't found, so nothing can be saved.\n"
                                 "Install it with one click on the Setup & updates page.")
             self.nav.setCurrentRow(PAGE_SETUP)
             return
@@ -503,7 +503,7 @@ class MainWindow(QMainWindow):
                 create_shortcuts(list(shortcut_folders()))
         if not find_ffmpeg(self._state.settings):
             answer = QMessageBox.question(
-                self, APP_NAME, "FFmpeg is needed to make MP3s and isn't installed yet. Set it up now?",
+                self, APP_NAME, "FFmpeg is needed to save songs and isn't installed yet. Set it up now?",
             )
             if answer == QMessageBox.StandardButton.Yes:
                 self.nav.setCurrentRow(PAGE_SETUP)

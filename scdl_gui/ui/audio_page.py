@@ -1,10 +1,11 @@
-"""Audio page: MP3 quality, volume levelling and which SoundCloud source to use."""
+"""Audio page: output format and quality, volume levelling and which SoundCloud source to use."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QPushButton, QSlider, QSpinBox
 
+from scdl_gui.formats import FORMATS, audio_format
 from scdl_gui.ui.state import AppState
 from scdl_gui.ui.widgets import Card, OptionList, Page, hbox, label
 
@@ -15,6 +16,20 @@ QUALITY_OPTIONS = [
     ("V2", "Smaller (VBR V2, ~190 kbps)", "Still very good, about 4.3 MB per song."),
     ("192", "192 kbps constant", "Smallest files here, about 4.3 MB per song."),
 ]
+AAC_OPTIONS = [
+    (256, "256 kbps - recommended", "Same as SoundCloud Go+ and YouTube Premium streams, about 5.8 MB per 3-minute song."),
+    (320, "320 kbps", "About 7.2 MB per song. No audible difference from 256 for almost everyone."),
+    (192, "192 kbps", "About 4.3 MB per song."),
+    (128, "128 kbps", "About 2.9 MB per song - fine for a phone with little space."),
+]
+OPUS_OPTIONS = [
+    (160, "160 kbps - recommended", "Sounds the same as the source to almost everyone, about 3.6 MB per 3-minute song."),
+    (256, "256 kbps", "About 5.8 MB per song."),
+    (192, "192 kbps", "About 4.3 MB per song."),
+    (128, "128 kbps", "About 2.9 MB per song - YouTube's own Opus is about this."),
+    (96, "96 kbps", "About 2.2 MB per song, still good."),
+]
+QUALITY_TITLES = {"mp3": "MP3 quality", "m4a": "AAC quality", "opus": "Opus quality"}
 LOUDNESS_PRESETS = [
     (-16.0, "Quiet", "-16 LUFS: lots of headroom, like Apple Music"),
     (-14.0, "Standard", "-14 LUFS: Spotify / YouTube level"),
@@ -26,16 +41,19 @@ SLIDER_MIN, SLIDER_MAX = -20.0, -6.0
 
 class AudioPage(Page):
     def __init__(self, state: AppState) -> None:
-        super().__init__("Audio", "How the MP3s sound and how big they are.")
+        super().__init__("Audio", "The file type, how it sounds and how big the files are.")
         self._state = state
 
-        quality = Card(
-            "MP3 quality", "SoundCloud's best stream (256k AAC with Go+, or the original upload) is converted to:"
+        kind = Card(
+            "Format",
+            "Every song comes from the best stream there is: SoundCloud's (256k AAC with Go+, or the artist's "
+            "original upload) or YouTube's (up to 256k with Premium). It's then saved as:",
         )
-        self.quality = OptionList(QUALITY_OPTIONS)
-        self.quality.changed.connect(lambda q: state.update(quality=q))
-        quality.body.addWidget(self.quality)
-        self.body.addWidget(quality)
+        self.format = OptionList([(f.key, f.label, f.hint) for f in FORMATS])
+        self.format.changed.connect(lambda key: state.update(audio_format=key))
+        kind.body.addWidget(self.format)
+        self.body.addWidget(kind)
+        self.body.addWidget(self._build_quality())
         self.body.addWidget(self._build_loudness())
 
         source = Card("Source")
@@ -63,11 +81,40 @@ class AudioPage(Page):
         state.settings_changed.connect(lambda _s: self._load())
         self._load()
 
+    def _build_quality(self) -> Card:
+        self.quality_card = Card("Quality")
+        self.quality = OptionList(QUALITY_OPTIONS)
+        self.quality.changed.connect(lambda q: self._state.update(quality=q))
+        self.aac = OptionList(AAC_OPTIONS)
+        self.aac.changed.connect(lambda kbps: self._state.update(aac_bitrate=kbps))
+        self.opus = OptionList(OPUS_OPTIONS)
+        self.opus.changed.connect(lambda kbps: self._state.update(opus_bitrate=kbps))
+        self._quality_lists = {"mp3": self.quality, "m4a": self.aac, "opus": self.opus}
+        for options in self._quality_lists.values():
+            self.quality_card.body.addWidget(options)
+        self.copy_note = label("", "Hint", wrap=True)
+        self.quality_card.body.addWidget(self.copy_note)
+        return self.quality_card
+
+    def _show_quality(self, key: str) -> None:
+        """Only the chosen format's choices; lossless and "no conversion" have none, so no card."""
+        for fmt, options in self._quality_lists.items():
+            options.setVisible(fmt == key)
+        self.quality_card.setVisible(key in self._quality_lists)
+        self.quality_card.title.setText(QUALITY_TITLES.get(key, "Quality"))
+        codec = {"m4a": "AAC", "opus": "Opus"}.get(key)
+        self.copy_note.setVisible(codec is not None)
+        if codec:
+            self.copy_note.setText(
+                f"Used when the audio has to be converted - always with volume levelling on. With it off, a stream "
+                f"that's already {codec} is kept exactly as it is: no re-encode, nothing lost."
+            )
+
     def _build_loudness(self) -> Card:
         card = Card(
             "Even out volume",
             "Measures every song and turns it up or down so they all play at the same loudness. "
-            "It's a plain volume change done during the MP3 encode, so there's no extra quality loss.",
+            "It's a plain volume change done while the file is encoded, so there's no extra quality loss.",
         )
         self.normalize = QCheckBox("Make all songs the same loudness")
         self.normalize.toggled.connect(lambda on: self._state.update(normalize=on))
@@ -99,7 +146,13 @@ class AudioPage(Page):
 
     def _load(self) -> None:
         s = self._state.settings
+        fmt = audio_format(s.audio_format)
+        self.format.set_value(fmt.key)
         self.quality.set_value(s.quality)
+        self.aac.set_value(s.aac_bitrate)
+        self.opus.set_value(s.opus_bitrate)
+        self._show_quality(fmt.key)
+        self.normalize.setEnabled(fmt.converts)
         checks = ((self.normalize, s.normalize), (self.originals, s.use_originals), (self.previews, s.skip_previews))
         for widget, value in checks:
             widget.blockSignals(True)
@@ -114,11 +167,14 @@ class AudioPage(Page):
         for value, button in self.preset_buttons.items():
             button.setChecked(value == s.target_lufs)
         self.preset_group.setExclusive(True)
+        levelling = s.normalize and fmt.converts
         for widget in (self.slider, *self.preset_buttons.values()):
-            widget.setEnabled(s.normalize)
+            widget.setEnabled(levelling)
         match = next((hint for value, _n, hint in LOUDNESS_PRESETS if value == s.target_lufs), None)
         self.loudness_hint.setText(
             f"{match or f'{s.target_lufs:g} LUFS: custom level'}. "
             "Most dance tracks are mastered around -6 to -9 LUFS, so lower targets play quieter overall."
-            if s.normalize else "Off: every song keeps the loudness it was uploaded with."
+            if levelling else "Off: every song keeps the loudness it was uploaded with."
         )
+        if not fmt.converts:
+            self.loudness_hint.setText("Not with 'no conversion': changing the volume means re-encoding the audio.")

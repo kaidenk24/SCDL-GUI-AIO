@@ -173,7 +173,7 @@ class WatchController(QObject):
         if not Path(settings.library).is_dir():
             return f"Waiting for the library folder ({settings.library}) - is the drive connected?"
         if not find_ffmpeg(settings):
-            return "FFmpeg isn't installed (Setup & updates), so nothing can be converted to MP3."
+            return "FFmpeg isn't installed (Setup & updates), so nothing can be saved."
         return ""
 
     def _set_problem(self, problem: str) -> None:

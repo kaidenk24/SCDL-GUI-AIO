@@ -276,7 +276,7 @@ class PlaylistsPage(Page):
     def _follow(self) -> None:
         links = extract_links(self.link.text())
         if not links:
-            self.feedback.setText("No soundcloud.com link found in that text.")
+            self.feedback.setText("No SoundCloud or YouTube link found in that text.")
             return
         singles = [u for u in links if not is_followable(u)]
         added = self._controller.follow(links, self._current_folder())

@@ -1,6 +1,6 @@
 """Download worker: runs in its own process (one per queued link), started by the app.
 
-Wraps scdl's entry point and adds: MP3 conversion with optional loudness levelling,
+Wraps scdl's entry point and adds: conversion to the chosen format with optional loudness levelling,
 Firefox-cookie login, pacing for SoundCloud's API rate limit, Go+ preview rejection,
 playlist handling for non-set lists (likes, stations...) and a failure log.
 
@@ -10,6 +10,7 @@ Modes (after --worker):
     --describe URL [URL..]    print one "@@DESCRIBE {json}" line per link
     --yt-search FILE          find YouTube matches for DRM tracks (see youtube.py)
     --yt-download FILE        download a confirmed YouTube match (see youtube.py)
+    --youtube <scdl args>     download a YouTube link the same way (see youtube_links.py)
 
 With SCDL_YT_FALLBACK=1, DRM-protected tracks are reported as '@@DRM {json}' lines.
 """
@@ -18,6 +19,7 @@ import json
 import logging
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -38,11 +40,17 @@ from yt_dlp import YoutubeDL
 from yt_dlp.extractor import soundcloud as sc_extractor
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.postprocessor.common import PostProcessor
-from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
+from yt_dlp.postprocessor.ffmpeg import FFmpegExtractAudioPP, FFmpegPostProcessor
 from yt_dlp.utils import ExtractorError, PostProcessingError, prepend_extension, replace_extension
 
-QUALITY = os.environ.get("SCDL_MP3_QUALITY", "V0").upper()  # V0, V2, 320, 256, 192
-TARGET_LUFS = os.environ.get("SCDL_TARGET_LUFS") or None  # None = no loudness levelling
+from scdl_gui import formats  # noqa: E402
+from scdl_gui.engine import is_youtube  # noqa: E402
+
+FORMAT = formats.audio_format(os.environ.get("SCDL_FORMAT", formats.DEFAULT_FORMAT))
+QUALITY = os.environ.get("SCDL_MP3_QUALITY", "V0").upper()  # MP3: V0, V2, 320, 256, 192
+BITRATE = int(os.environ.get("SCDL_BITRATE") or 256)  # AAC / Opus kbps
+# None = no loudness levelling (it needs a re-encode, so not with "no conversion")
+TARGET_LUFS = (os.environ.get("SCDL_TARGET_LUFS") or None) if FORMAT.converts else None
 BROWSER_NAME = os.environ.get("SCDL_BROWSER") or "firefox"  # where logins are borrowed from
 BROWSER = BROWSER_NAME if os.environ.get("SCDL_SC_LOGIN", "1") == "1" else None  # SoundCloud login
 PROFILE = os.environ.get("SCDL_COOKIE_PROFILE") or None
@@ -64,12 +72,11 @@ RATE_LIMIT_BACKOFF_SECONDS = (30, 60, 120, 240)
 TRUE_PEAK_DBTP = -1.0
 # High LRA target keeps loudnorm in linear (pure gain) mode instead of compressing dynamics.
 TARGET_LRA = 20
-IS_VBR = QUALITY.startswith("V")
-MP3_QUALITY_ARGS = ["-q:a", QUALITY[1:]] if IS_VBR else ["-b:a", f"{QUALITY}k"]
-EXTRACT_AUDIO_QUALITY = QUALITY[1:] if IS_VBR else QUALITY
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 CODEC_RANK = {"aac": 2, "mp3": 1, "opus": 0}
+# Stream codec -> the file FFmpegExtractAudio's "best" (no conversion) makes of it.
+STREAM_EXTS = {"opus": "opus", "mp4a": "m4a", "aac": "m4a", "mp3": "mp3", "vorbis": "ogg", "flac": "flac"}
 STREAM_QUALITY_RANK = {"hq": 2, "sq": 1, "lq": 0}
 DRM_PROTOCOL_PREFIXES = ("ctr-", "cbc-")
 
@@ -258,8 +265,8 @@ def extract_info_reporting_drm(self, url, download=True, ie_key=None, extra_info
 # ---------------------------------------------------------------- post-processing
 
 
-class LoudnessMp3PP(FFmpegPostProcessor):
-    """Convert to MP3 with two-pass EBU R128 loudness normalisation (pure gain when possible)."""
+class LoudnessPP(FFmpegPostProcessor):
+    """Convert to the chosen format with two-pass EBU R128 loudness normalisation (pure gain when possible)."""
 
     def _measure(self, path):
         scan = f"loudnorm=I={TARGET_LUFS}:TP={TRUE_PEAK_DBTP}:LRA={TARGET_LRA}:print_format=json"
@@ -273,16 +280,18 @@ class LoudnessMp3PP(FFmpegPostProcessor):
         return stats if math.isfinite(float(stats["input_i"])) else None  # None = silent track
 
     def _sample_rate(self, path):
+        if FORMAT.key == "opus":
+            return formats.OPUS_SAMPLE_RATE
         streams = self.get_metadata_object(path).get("streams") or []
         rates = [s.get("sample_rate") for s in streams if s.get("codec_type") == "audio"]
         return str(rates[0]) if rates and rates[0] else "44100"
 
     def run(self, info):
         source = info["filepath"]
-        if not info.get("__real_download") and source.endswith(".mp3"):
+        if not info.get("__real_download") and source.endswith(f".{FORMAT.ext}"):
             return [], info  # already in the folder (but not in the archive): don't re-encode it
-        info["__real_download"] = True  # a new MP3, so scdl's tagger tags it
-        target = replace_extension(source, "mp3")
+        info["__real_download"] = True  # a new file, so scdl's tagger tags it
+        target = replace_extension(source, FORMAT.ext)
         output = prepend_extension(target, "temp") if target == source else target
         stats = self._measure(source)
         opts = ["-vn"]
@@ -296,12 +305,12 @@ class LoudnessMp3PP(FFmpegPostProcessor):
             )
             # loudnorm upsamples to 192 kHz internally; keep the source rate.
             opts += ["-af", gain, "-ar", self._sample_rate(source)]
-        opts += ["-c:a", "libmp3lame", *MP3_QUALITY_ARGS]
+        opts += formats.encoder_args(FORMAT, QUALITY, BITRATE)
         self.run_ffmpeg(source, output, opts)
         if output != target:
             os.replace(output, target)
         info["filepath"] = target
-        info["ext"] = "mp3"
+        info["ext"] = FORMAT.ext
         return ([source] if source != target else []), info
 
 
@@ -326,7 +335,33 @@ class ExistingFilePP(PostProcessor):
 
     def run(self, info):
         info.setdefault("__real_download", False)
+        if not FORMAT.converts:
+            # "No conversion" makes .m4a/.opus/.mp3 from the stream's codec, so that's the file to look for -
+            # without it yt-dlp looks for x.webm, misses x.opus and downloads it again.
+            codec = (info.get("acodec") or "").partition(".")[0]
+            self._downloader.params["final_ext"] = STREAM_EXTS.get(codec)
         return [], info
+
+
+class ConvertPP(FFmpegExtractAudioPP):
+    """Without levelling: convert to the chosen format - or only repackage when the stream is already in that
+    codec, or for "no conversion", so no quality is lost to a needless re-encode. A file that was already in
+    the folder is left alone (yt-dlp would re-encode a WAV - ffprobe calls its codec pcm_s16le, not wav -
+    and drop its tags)."""
+
+    def __init__(self) -> None:
+        super().__init__(preferredcodec=FORMAT.extract_codec, nopostoverwrites=False,
+                         preferredquality=formats.extract_quality(FORMAT, QUALITY, BITRATE))
+
+    def run(self, info):
+        if not info.get("__real_download") and FORMAT.ext and info["filepath"].endswith(f".{FORMAT.ext}"):
+            return [], info
+        return super().run(info)
+
+
+def convert_pp() -> PostProcessor:
+    """The step that makes the chosen format; it must run before the tagger."""
+    return LoudnessPP() if TARGET_LUFS else ConvertPP()
 
 
 class AlbumModePP(PostProcessor):
@@ -364,34 +399,43 @@ def build_params(url, scdl_args):
     if not ALLOW_PREVIEWS:
         # Never save 30s Go+ snippets as if they were full tracks.
         params["format"] = params.get("format", "ba") + "[format_id!*=preview]"
-    params["final_ext"] = "mp3"
     # Skip playlist-level files: the playlist cover lands as a stray "..jpg" (scdl filename
     # patch bug) and isn't needed since every track embeds its own art.
     params["allow_playlist_files"] = False
-    if FFMPEG:
-        params["ffmpeg_location"] = FFMPEG
     if MAX_TRACKS > 0:
         params["playlist_items"] = f"1:{MAX_TRACKS}"
-    if TARGET_LUFS:
-        # Must run before scdl's tagger (the first post_process entry) so tags land on the MP3.
-        first_post = next((i for i, (_, when) in enumerate(postprocessors) if when == "post_process"), len(postprocessors))
-        postprocessors.insert(first_post, (LoudnessMp3PP(), "post_process"))
-    else:
-        params["postprocessors"] = [
-            *params.get("postprocessors", []),
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": EXTRACT_AUDIO_QUALITY,
-                "nopostoverwrites": False,
-            },
-        ]
+    params.update(output_params())
+    # Must run before scdl's tagger (the first post_process entry) so tags land on the new file.
+    first_post = next((i for i, (_, when) in enumerate(postprocessors) if when == "post_process"), len(postprocessors))
+    postprocessors.insert(first_post, (convert_pp(), "post_process"))
     if BROWSER:
         params["cookiesfrombrowser"] = (BROWSER, PROFILE, None, None)
     return url, params, postprocessors
 
 
+def output_params() -> dict:
+    """yt-dlp options for the chosen format (shared with YouTube links); the conversion is convert_pp()."""
+    params = {}
+    if FFMPEG:
+        params["ffmpeg_location"] = FFMPEG
+    if FORMAT.converts:
+        params["final_ext"] = FORMAT.ext  # also how a file that's already there is recognised
+    return params
+
+
 # ---------------------------------------------------------------- helpers & modes
+
+
+def record_failure(message: str) -> None:
+    if not FAILED_LOG:
+        return
+    reason = message.replace("\r", " ").replace("\n", " ")
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with open(FAILED_LOG, "a", encoding="utf-8") as f:
+            f.write(f"# {stamp} | source={SOURCE_URL} | reason={reason}\n")
+    except OSError as err:
+        print(f"[worker] Could not write the failure log: {err}", flush=True)
 
 
 class FailureLog(logging.Handler):
@@ -401,15 +445,7 @@ class FailureLog(logging.Handler):
 
     def emit(self, record):
         self.count += 1
-        if not FAILED_LOG:
-            return
-        reason = record.getMessage().replace("\r", " ").replace("\n", " ")
-        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            with open(FAILED_LOG, "a", encoding="utf-8") as f:
-                f.write(f"# {stamp} | source={SOURCE_URL} | reason={reason}\n")
-        except OSError as err:
-            print(f"[worker] Could not write the failure log: {err}", flush=True)
+        record_failure(record.getMessage())
 
 
 def cookie_opts():
@@ -451,6 +487,12 @@ def describe(urls):
         for url in urls:
             result = {"url": url}
             try:
+                if is_youtube(url):
+                    from scdl_gui import youtube_links
+
+                    result.update(resolved=url, **youtube_links.describe(url))
+                    emit("@@DESCRIBE ", result)
+                    continue
                 resolved = expand_short_link(url)
                 info = ydl.extract_info(resolved, download=False, process=False)
                 result.update(
@@ -460,7 +502,9 @@ def describe(urls):
                     uploader=info.get("uploader"),
                 )
             except Exception as e:  # report per link, keep going
-                result["error"] = (str(e).strip().splitlines() or ["lookup failed"])[0][:200]
+                first_line = (str(e).strip().splitlines() or ["lookup failed"])[0]
+                # "ERROR: [youtube] abc: This video is unavailable" -> "This video is unavailable"
+                result["error"] = re.sub(r"^ERROR: (?:\[[\w:]+\] )?(?:[\w-]+: )?", "", first_line)[:200]
             emit("@@DESCRIBE ", result)
 
 
@@ -476,6 +520,10 @@ def main(args):
         from scdl_gui import youtube
 
         return youtube.main(args)
+    if args[:1] == ["--youtube"]:
+        from scdl_gui import youtube_links
+
+        return youtube_links.download(args[1:])
     if YT_FALLBACK:
         YoutubeDL.extract_info = extract_info_reporting_drm
     failures = FailureLog()

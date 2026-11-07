@@ -10,7 +10,7 @@ import logging
 import os
 from dataclasses import asdict, dataclass, replace
 
-from scdl_gui.engine import guess_kind
+from scdl_gui.engine import SINGLE_KINDS, guess_kind
 from scdl_gui.parsing import JobCounts
 from scdl_gui.settings import FOLDER_AUTO, Job, _coerce, _read_json, _write_json, data_dir
 
@@ -41,7 +41,7 @@ class Watch:
 
 def is_followable(url: str, kind: str = "") -> bool:
     """Anything that can gain tracks; a single track never changes."""
-    return (kind or guess_kind(url)) != "Track"
+    return (kind or guess_kind(url)) not in SINGLE_KINDS
 
 
 def describe_interval(hours: int) -> str:

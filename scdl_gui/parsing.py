@@ -18,14 +18,14 @@ JSON_EVENTS = {
 
 _PLAYLIST = re.compile(r"^\[download\] Downloading playlist: (.+)$")
 _ITEM = re.compile(r"^\[download\] Downloading item (\d+) of (\d+)")
-_EXTRACTING = re.compile(r"^\[soundcloud\] Extracting URL: https?://[^/]+/(.+)$")
+_EXTRACTING = re.compile(r"^\[(?:soundcloud|youtube)\] Extracting URL: https?://[^/]+/(.+)$")
 _DESTINATION = re.compile(r"^\[download\] Destination: (.+)$")
 _SAVED = re.compile(r'^\[Mutagen\] Adding metadata to "(.+)"')
 _ARCHIVED = re.compile(r"^\[download\] (?:\d+: )?(.+?) has already been recorded in the archive")
 _EXISTS = re.compile(r"^\[download\] (.+?) has already been downloaded")
 _ERROR = re.compile(r"^ERROR: (?:\[[\w:]+\] )?(?:[\w-]+: )?(.+)$")
 _RATE = re.compile(r"^\[rate-limit\] (.+)$")
-_LOUDNESS = re.compile(r"^\[LoudnessMp3\] (.+)$")
+_LOUDNESS = re.compile(r"^\[Loudness(?:Mp3)?\] (.+)$")
 
 _FRIENDLY_ERRORS = (
     ("drm protected", "Protected by DRM - SoundCloud doesn't allow downloading this one"),

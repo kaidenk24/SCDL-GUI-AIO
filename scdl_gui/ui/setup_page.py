@@ -58,7 +58,7 @@ class SetupPage(Page):
         choose.clicked.connect(self._choose_ffmpeg)
         auto = QPushButton("Find automatically")
         auto.clicked.connect(lambda: self._state.update(ffmpeg_path=""))
-        card.body.addWidget(label("FFmpeg - converts audio to MP3 (required)", "CardTitle"))
+        card.body.addWidget(label("FFmpeg - converts and tags the audio (required)", "CardTitle"))
         card.body.addWidget(self.ffmpeg_status)
         card.body.addLayout(hbox(self.install_ffmpeg, choose, auto, None))
 
@@ -121,7 +121,7 @@ class SetupPage(Page):
         self.auto_check.setChecked(s.check_updates)
         self.auto_check.blockSignals(False)
         self._show_tool(self.ffmpeg_status, self.install_ffmpeg, find_ffmpeg(s),
-                        "Not found - nothing can be converted to MP3 until it's installed.")
+                        "Not found - nothing can be saved until it's installed.")
         self._show_tool(self.node_status, self.install_node, find_js_runtime(),
                         "Not found - YouTube matches won't work until it's installed.")
 

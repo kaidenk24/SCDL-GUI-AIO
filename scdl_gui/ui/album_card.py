@@ -1,4 +1,4 @@
-"""'Album tag' card: how the Album tag is set, plus fixing it on MP3s already in the library."""
+"""'Album tag' card: how the Album tag is set, plus fixing it on songs already in the library."""
 
 from __future__ import annotations
 
@@ -28,12 +28,12 @@ class _Bridge(QObject):
 
 class AlbumCard(Card):
     def __init__(self, state: AppState) -> None:
-        super().__init__("Album tag", "What the Album field of each MP3 says.")
+        super().__init__("Album tag", "What the Album field of each song says.")
         self._state = state
         self._busy = False
         self.options = OptionList(ALBUM_OPTIONS)
         self.options.changed.connect(lambda mode: state.update(album_mode=mode))
-        self.apply = QPushButton("Apply to MP3s already in my library")
+        self.apply = QPushButton("Apply to songs already in my library")
         self.apply.setToolTip("Rewrites only the Album tag of files you already have - the audio isn't touched")
         self.apply.clicked.connect(self._apply)
         self.status = label("", "Hint", wrap=True)
@@ -61,7 +61,7 @@ class AlbumCard(Card):
         what = "its song title" if mode == "title" else "empty"
         answer = QMessageBox.question(
             self, "Album tag",
-            f"Set the Album tag of every MP3 in\n{library}\nto {what}?\n\n"
+            f"Set the Album tag of every song in\n{library}\nto {what}?\n\n"
             "Only the tags change, not the audio. Best done when no downloads are running.",
         )
         if answer != QMessageBox.StandardButton.Yes:

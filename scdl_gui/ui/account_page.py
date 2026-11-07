@@ -1,4 +1,4 @@
-"""Account & tags page: logins borrowed from your browser, YouTube matching, and MP3 tags/artwork."""
+"""Account & tags page: logins borrowed from your browser, YouTube matching, and tags/artwork."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class AccountPage(Page):
 
     def __init__(self, state: AppState) -> None:
         super().__init__(
-            "Account & tags", "Your logins, finding DRM-protected tracks on YouTube, and what gets written into each MP3.",
+            "Account & tags", "Your logins, finding DRM-protected tracks on YouTube, and what gets written into each song.",
         )
         self._state = state
         self.body.addWidget(self._build_login())

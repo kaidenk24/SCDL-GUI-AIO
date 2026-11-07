@@ -17,10 +17,10 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 import yt_dlp.globals
-from mutagen.id3 import APIC, COMM, ID3, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TRCK, WOAF, ID3NoHeaderError
+from scdl.patches.mutagen_postprocessor import MutagenPP
 from yt_dlp import YoutubeDL
 
-from scdl_gui import worker
+from scdl_gui import formats, worker
 from scdl_gui.engine import has_pot_plugin
 from scdl_gui.matching import Candidate, build_query, rank
 
@@ -154,7 +154,7 @@ def search_items(items: list[dict]) -> None:
 # ---------------------------------------------------------------- download & tag
 
 
-def _artwork(track: dict) -> tuple[bytes, str] | None:
+def _artwork(track: dict) -> bytes | None:
     url = track.get("artwork") or ""
     if not url:
         return None
@@ -162,42 +162,37 @@ def _artwork(track: dict) -> tuple[bytes, str] | None:
         url = url.replace("-original.", "-t500x500.")
     try:
         with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=20) as r:
-            data = r.read()
+            return r.read()
     except OSError:
         return None
-    return data, "image/png" if data[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
 
 
-def write_tags(path: str, track: dict, youtube_url: str) -> None:
-    """Tag the MP3 like scdl tags SoundCloud downloads (SoundCloud metadata, not YouTube's)."""
-    try:
-        tags = ID3(path)
-    except ID3NoHeaderError:
-        tags = ID3()
-    tags.clear()
-    tags.add(TIT2(encoding=3, text=track.get("title") or ""))
-    if track.get("uploader"):
-        tags.add(TPE1(encoding=3, text=track["uploader"]))
+def tag_info(path: str, track: dict, youtube_url: str) -> dict:
+    """What scdl's tagger writes: the SoundCloud track's details (not YouTube's), in any format."""
+    info = {
+        "filepath": path, "ext": os.path.splitext(path)[1][1:].lower(), "__real_download": True,
+        "title": track.get("title") or "", "artist": track.get("uploader") or None, "genre": track.get("genre") or None,
+        "upload_date": track.get("upload_date") or None, "webpage_url": track.get("sc_url") or None,
+        "description": f"Audio from {youtube_url} (SoundCloud upload is DRM-protected)",
+    }
     if ALBUM_MODE == "title":
-        tags.add(TALB(encoding=3, text=track.get("title") or ""))
+        info["meta_album"] = info["title"]
     elif ALBUM_MODE == "playlist" and track.get("playlist"):
-        tags.add(TALB(encoding=3, text=track["playlist"]))
-        if track.get("owner"):
-            tags.add(TPE2(encoding=3, text=track["owner"]))
-        if track.get("playlist_index"):
-            tags.add(TRCK(encoding=3, text=str(track["playlist_index"])))
-    if track.get("genre"):
-        tags.add(TCON(encoding=3, text=track["genre"]))
-    date = track.get("upload_date") or ""
-    if len(date) == 8:
-        tags.add(TDRC(encoding=3, text=f"{date[:4]}-{date[4:6]}-{date[6:]}"))
-    if track.get("sc_url"):
-        tags.add(WOAF(url=track["sc_url"]))
-    tags.add(COMM(encoding=3, lang="eng", desc="", text=f"Audio from {youtube_url} (SoundCloud upload is DRM-protected)"))
+        info["meta_album"] = track["playlist"]
+        info["meta_album_artist"] = track.get("owner") or None
+        info["meta_track"] = str(track["playlist_index"]) if track.get("playlist_index") else None
+    return info
+
+
+def write_tags(ydl: YoutubeDL, path: str, track: dict, youtube_url: str) -> None:
+    info = tag_info(path, track, youtube_url)
     art = _artwork(track)
     if art:
-        tags.add(APIC(encoding=3, mime=art[1], type=3, desc="Cover", data=art[0]))
-    tags.save(path)
+        cover = f"{os.path.splitext(path)[0]}.cover.jpg"
+        with open(cover, "wb") as f:
+            f.write(art)
+        info["thumbnails"] = [{"filepath": cover}]  # the tagger embeds it, then deletes the file
+    MutagenPP(True, ydl).run(info)
 
 
 def remember_in_archive(archive: str, sc_id: str) -> None:
@@ -216,24 +211,28 @@ def remember_in_archive(archive: str, sc_id: str) -> None:
         f.write(("" if not existing or existing.endswith("\n") else "\n") + line + "\n")
 
 
+def _saved_file(info: dict, target: str) -> str:
+    finished = [d.get("filepath") for d in info.get("requested_downloads") or []]
+    found = [f for f in finished if f and os.path.exists(f)]
+    if found:
+        return found[0]
+    ext = worker.FORMAT.ext
+    if ext and os.path.exists(f"{target}.{ext}"):
+        return f"{target}.{ext}"
+    raise RuntimeError("the download finished but no audio file was produced")
+
+
 def download_match(job: dict) -> tuple[str, str]:
     target, url, track = job["target"], job["url"], job["track"]
     os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
-    params = youtube_opts(format="bestaudio/best", outtmpl=target + ".%(ext)s", final_ext="mp3", overwrites=True)
-    if worker.FFMPEG:
-        params["ffmpeg_location"] = worker.FFMPEG
-    if not worker.TARGET_LUFS:
-        params["postprocessors"] = [
-            {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": worker.EXTRACT_AUDIO_QUALITY}
-        ]
+    levelling = bool(worker.TARGET_LUFS)
+    params = youtube_opts(format=formats.source_format(worker.FORMAT, levelling), outtmpl=target + ".%(ext)s",
+                          overwrites=True, **worker.output_params())
     with YoutubeDL(params) as ydl:
-        if worker.TARGET_LUFS:
-            ydl.add_post_processor(worker.LoudnessMp3PP(), when="post_process")
+        ydl.add_post_processor(worker.convert_pp(), when="post_process")
         info = ydl.extract_info(url, download=True) or {}
-    path = target + ".mp3"
-    if not os.path.exists(path):
-        raise RuntimeError("the download finished but no MP3 was produced")
-    write_tags(path, track, url)
+        path = _saved_file(info, target)
+        write_tags(ydl, path, track, url)
     remember_in_archive(job.get("archive") or "", track.get("sc_id") or "")
     abr = info.get("abr")
     source = f"{info.get('acodec') or 'audio'} {round(abr)}k" if abr else (info.get("format_id") or "audio")

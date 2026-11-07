@@ -68,7 +68,7 @@ def _write_shortcut(link: Path, extra_arguments: str = "") -> bool:
         "$s = (New-Object -ComObject WScript.Shell).CreateShortcut(" + _ps_quote(str(link)) + ");"
         f"$s.TargetPath = {_ps_quote(program)}; $s.Arguments = {_ps_quote(arguments)};"
         f"$s.WorkingDirectory = {_ps_quote(str(app_dir()))}; $s.IconLocation = {_ps_quote(str(icon) + ',0')};"
-        f"$s.Description = {_ps_quote('Download SoundCloud playlists as MP3s')}; $s.Save()"
+        f"$s.Description = {_ps_quote('Download SoundCloud and YouTube music')}; $s.Save()"
     )
     try:
         result = subprocess.run(

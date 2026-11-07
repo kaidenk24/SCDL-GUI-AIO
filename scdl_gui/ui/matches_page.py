@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 from yt_dlp.utils import sanitize_filename
 
+from scdl_gui.formats import audio_format
 from scdl_gui.matches import (
     DOWNLOADING,
     FAILED,
@@ -412,7 +413,8 @@ class MatchesPage(Page):
             bits.append(f"ISRC {track['isrc']}")
         self.detail_meta.setText("  -  ".join(bits))
         prefix = "Saved as" if item.status == SAVED else "Will be saved as"
-        self.detail_target.setText(f"{prefix}: {track.get('target') or '(library folder)'}.mp3")
+        ext = audio_format(self._state.settings.audio_format).ext
+        self.detail_target.setText(f"{prefix}: {track.get('target') or '(library folder)'}{f'.{ext}' if ext else ''}")
         self.query.setText(item.query)
         self._fill_candidates(item)
         busy = item.status in (SEARCHING, DOWNLOADING)

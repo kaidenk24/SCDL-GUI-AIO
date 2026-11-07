@@ -10,6 +10,7 @@ from dataclasses import MISSING, asdict, dataclass, fields, replace
 from pathlib import Path
 
 from scdl_gui import APP_NAME
+from scdl_gui.formats import AAC_BITRATES, BY_KEY, DEFAULT_FORMAT, MP3_QUALITIES, OPUS_BITRATES
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ FOLDER_AUTO = None  # use the save layout (Settings.folder_template)
 FOLDER_ROOT = ""  # straight into the library folder
 
 ARCHIVE_MODES = ("shared", "per_link", "files")
-QUALITIES = ("V0", "320", "256", "V2", "192")
+QUALITIES = MP3_QUALITIES
 ALBUM_MODES = ("title", "playlist", "none")
 WATCH_INTERVALS = (1, 3, 6, 12, 24)  # hours between checks of followed playlists
 # Browsers yt-dlp can borrow cookies from. Firefox is the most reliable on Windows: recent
@@ -32,7 +33,10 @@ class Settings:
     folder_template: str = "{playlist}"
     file_template: str = "{title}"
     archive_mode: str = "shared"
-    quality: str = "V0"
+    audio_format: str = DEFAULT_FORMAT  # see formats.FORMATS
+    quality: str = "V0"  # MP3
+    aac_bitrate: int = 256
+    opus_bitrate: int = 160
     normalize: bool = True
     target_lufs: float = -14.0
     use_originals: bool = True
@@ -127,6 +131,12 @@ def _validated(settings: Settings) -> Settings:
         changes["archive_mode"] = "shared"
     if settings.quality not in QUALITIES:
         changes["quality"] = "V0"
+    if settings.audio_format not in BY_KEY:
+        changes["audio_format"] = DEFAULT_FORMAT
+    if settings.aac_bitrate not in AAC_BITRATES:
+        changes["aac_bitrate"] = 256
+    if settings.opus_bitrate not in OPUS_BITRATES:
+        changes["opus_bitrate"] = 160
     if not -30 <= settings.target_lufs <= -5:
         changes["target_lufs"] = -14.0
     if settings.max_tracks < 0:

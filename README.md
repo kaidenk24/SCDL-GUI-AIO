@@ -1,7 +1,8 @@
 # SoundCloud Downloader (scdl-gui)
 
-I wanted my SoundCloud playlists as proper MP3s in my music library - sorted into folders, tagged, with the
-cover art - without babysitting a command line every time a playlist got a new song. So I built this. It's a
+I wanted my SoundCloud playlists as proper music files in my library - sorted into folders, tagged, with the
+cover art - without babysitting a command line every time a playlist got a new song. So I built this (and then
+it learned YouTube too). It's a
 Windows app on top of [scdl](https://github.com/scdl-org/scdl) and [yt-dlp](https://github.com/yt-dlp/yt-dlp):
 you paste links, pick where they go, and it does the rest.
 
@@ -14,12 +15,13 @@ you paste links, pick where they go, and it does the rest.
 
 ## What it does
 
-**Paste and go.** Throw anything at the Queue: playlists, albums, your likes, a whole profile, stations, single
-tracks, `on.soundcloud.com` share links - or a whole block of text, it picks the links out for you. It looks up
-the playlist names too, so you're not staring at URLs.
+**Paste and go.** Throw anything at the Queue: SoundCloud playlists, albums, your likes, a whole profile,
+stations, single tracks, `on.soundcloud.com` share links - and YouTube or YouTube Music videos, playlists and
+channels. Or paste a whole block of text, it picks the links out for you. It looks up the names too, so you're
+not staring at URLs.
 
 **Follow your playlists and forget about them.** This is my favourite part. On the Playlists page you follow a
-playlist (or your likes, or a profile), pick its folder, and that's it - every few hours (1 to 24, you choose)
+playlist (or your likes, a profile, a YouTube playlist or channel), pick its folder, and that's it - every few hours (1 to 24, you choose)
 the app checks it and downloads whatever got added since last time. Close the window and it keeps going from
 the notification area by the clock; tick *Start with Windows* and you never have to think about it again. It
 never fights with downloads you start yourself, it waits if your music drive isn't plugged in, and if a check
@@ -30,16 +32,20 @@ the Save layout page lets you build folder and file names from tokens like `{pla
 and `{index}`, with a live preview so you can see exactly where a song will land. You can also make your own
 folders and just drag links onto them, or send a link anywhere on your PC.
 
-**The best audio SoundCloud will give you.** It borrows your SoundCloud login from your browser, so a Go+
-account gets the 256k AAC streams, and when an artist allows downloads it grabs their original upload instead.
-That gets converted to MP3 at the quality you pick (V0, 320, 256, V2 or 192).
+**The best audio there is, in the format you want.** It borrows your logins from your browser, so a SoundCloud
+Go+ account gets the 256k AAC streams (and when an artist allows downloads it grabs their original upload
+instead), and YouTube gives its best stream - 256k with Premium. You pick what it's saved as: **MP3** (V0, 320,
+256, V2 or 192), **AAC .m4a**, **Opus**, **FLAC**, **WAV**, or **no conversion at all** - exactly what was
+streamed. It never re-encodes for nothing: when the stream is already in your format (SoundCloud's AAC for .m4a,
+YouTube's Opus for Opus) and you're not levelling the volume, it's just repackaged, which is quicker and loses
+nothing.
 
 **Every song at the same volume.** Turn on *Make all songs the same loudness* and every track is levelled to
 the same EBU R128 loudness - Quiet, Standard (Spotify/YouTube level), Loud or Club. It happens in the same
 encode, so it costs no extra quality.
 
-**Tagged properly.** Title, artist, date, genre, the SoundCloud link and full-size cover art go into every
-file. The Album tag is the song's own title by default, because otherwise iTunes and Apple Music lump a whole
+**Tagged properly.** Title, artist, date, genre, the link and full-size cover art go into every file, whichever
+format you picked. The Album tag is the song's own title by default, because otherwise iTunes and Apple Music lump a whole
 playlist under one cover - but you can switch to the playlist name, and fix up files you already have with
 one button.
 
@@ -67,7 +73,7 @@ monitor.
 2. Unzip it anywhere (e.g. `Documents\scdl-gui`) and run **`scdl-gui.exe`**. Windows SmartScreen may complain
    about an unknown publisher - hit *More info -> Run anyway*.
 3. The first time it starts, it offers Start menu and desktop shortcuts and a one-click install of
-   **FFmpeg**, which it needs to make MP3s.
+   **FFmpeg**, which it needs to convert and tag the audio.
 
 ### From source
 
@@ -88,7 +94,7 @@ to date by itself, and a git clone updates with `git pull` when there's a new ve
 1. **Queue** - paste links (or *Paste from clipboard* / *Import .txt*). Pick where each one goes in the
    *Save to* column, or drag it onto a folder in the Folders panel. *Auto* follows your Save layout.
 2. **Save layout** - how folders and files are named, and how tracks you already have are handled.
-3. **Audio** - MP3 quality, loudness levelling, original uploads, Go+ previews, and *only the first N tracks*
+3. **Audio** - format and quality, loudness levelling, original uploads, Go+ previews, and *only the first N tracks*
    (handy for "my latest 50 likes").
 4. **Account & tags** - which browser to borrow your SoundCloud/YouTube login from, and what goes into the tags.
 5. Hit **Start downloads**. The **Activity** page shows everything that was saved, skipped or failed.
@@ -109,15 +115,16 @@ default), closing the window leaves the app running down by the clock - right-cl
 *Start with Windows* puts a shortcut in your Startup folder that opens the app there, without a window.
 Opening the app again while it's running just brings the window back.
 
-### About YouTube matches
+### About YouTube (links and matches)
 
-These need [Node.js](https://nodejs.org) (one-click install on Setup & updates). Out of the box YouTube gives
-about 130-140 kbps audio.
+YouTube needs [Node.js](https://nodejs.org) (one-click install on Setup & updates). Out of the box YouTube gives
+about 130-160 kbps audio. A video opened from a playlist (`watch?v=...&list=...`) downloads just that video;
+paste the playlist's own link to get all of it.
 
 With **YouTube Music Premium**, press *Set up automatic PO tokens* on Setup & updates. The app downloads the
 [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) token generator
-(GPL-3.0, about 100 MB, runs on Node.js) into its data folder, and from then on matches come down at 256k AAC /
-282k Opus. It keeps itself updated. If you'd rather, you can paste a
+(GPL-3.0, about 100 MB, runs on Node.js) into its data folder, and from then on YouTube links and matches come
+down at 256k AAC / 282k Opus. It keeps itself updated. If you'd rather, you can paste a
 [PO token](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide) by hand on Account & tags.
 
 ## Where things are

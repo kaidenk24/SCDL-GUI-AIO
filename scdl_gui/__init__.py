@@ -1,4 +1,4 @@
-"""scdl-gui: a desktop app around scdl/yt-dlp for saving SoundCloud playlists as MP3s."""
+"""scdl-gui: a desktop app around scdl/yt-dlp for saving SoundCloud and YouTube music."""
 
 APP_NAME = "SoundCloud Downloader"
 APP_VERSION = "1.1.3"

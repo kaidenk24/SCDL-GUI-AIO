@@ -17,14 +17,14 @@ class Token:
 
 TOKENS = (
     Token("title", "title", "Title", "Track title"),
-    Token("artist", "uploader", "Artist", "SoundCloud account that uploaded the track"),
+    Token("artist", "uploader", "Artist", "Who uploaded it: the SoundCloud account or YouTube channel"),
     Token("playlist", "playlist", "Playlist", "Playlist name (or e.g. 'djexample (Likes)')"),
     Token("owner", "playlist_uploader", "Playlist owner", "Who made the playlist"),
     Token("index", "playlist_index", "Track #", "Position in the playlist, zero-padded (07)"),
     Token("year", "upload_date>%Y", "Year", "Year the track was uploaded"),
     Token("date", "upload_date>%Y-%m-%d", "Date", "Upload date (2025-06-14)"),
     Token("genre", "genre", "Genre", "Genre set by the uploader"),
-    Token("id", "id", "Track ID", "SoundCloud's numeric track ID"),
+    Token("id", "id", "Track ID", "SoundCloud track ID or YouTube video ID"),
 )
 FIELDS = {t.name: t.field for t in TOKENS}
 PLAYLIST_ONLY = ("playlist", "owner", "index")
@@ -162,14 +162,14 @@ def _evaluator():
     return _preview_ydl
 
 
-def preview_paths(library: str, layout: str, file_template: str) -> list[tuple[str, str]]:
+def preview_paths(library: str, layout: str, file_template: str, ext: str = "mp3") -> list[tuple[str, str]]:
     """Example output paths for a playlist track, a liked track and a single track."""
     target = output_target(library, layout, file_template)
     ydl = _evaluator()
     previews = []
     for label, info in SAMPLE_TRACKS:
         fmt = target.single_format if "playlist" not in info else target.playlist_format
-        relative = ydl.evaluate_outtmpl(fmt, {**info, "ext": "mp3"}, True)
+        relative = ydl.evaluate_outtmpl(fmt, {**info, "ext": ext}, True)
         parts = [p for p in re.split(r"[\\/]+", relative) if p.strip()]
         previews.append((label, str(PureWindowsPath(target.base, *parts))))
     return previews
