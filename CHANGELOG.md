@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 - **YouTube links**: paste YouTube or YouTube Music videos, playlists and channels into the queue, or follow
   YouTube playlists and channels on the Playlists page. Same folders, file names, archive, levelling and tags as
